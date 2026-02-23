@@ -178,7 +178,7 @@ export async function scheduleNotifications(
           notifications.push({
             id: getNotificationId(prayer.name, dayOffset, false),
             title: prayer.label,
-            body: `${PRAYER_MESSAGES[prayer.name].reminder} - in ${prayerSettings.reminderMinutes} min`,
+            body: PRAYER_MESSAGES[prayer.name].reminder,
             schedule: {
               at: reminderTime,
               allowWhileIdle: true,
@@ -198,7 +198,7 @@ export async function scheduleNotifications(
         notifications.push({
           id: getNotificationId(prayer.name, dayOffset, true),
           title: prayer.label,
-          body: `${PRAYER_MESSAGES[prayer.name].atTime} - now`,
+          body: PRAYER_MESSAGES[prayer.name].atTime,
           schedule: {
             at: prayerTime,
             allowWhileIdle: true,
@@ -315,16 +315,17 @@ export async function scheduleJumuahNotifications(
   for (let weekOffset = 0; weekOffset < WEEKS_TO_SCHEDULE_JUMUAH; weekOffset++) {
     // Find the next Friday
     const nextFriday = new Date(now);
-    const daysUntilFriday = (5 - now.getDay() + 7) % 7 || 7; // 5 = Friday
+    const daysUntilFriday = (5 - now.getDay() + 7) % 7; // 5 = Friday
     nextFriday.setDate(now.getDate() + daysUntilFriday + (weekOffset * 7));
 
     // Schedule notification for each Jumuah time
     jumuahSettings.times.forEach((time, timeIndex) => {
       const [khutbahHour, khutbahMinute] = time.khutbah.split(':').map(Number);
       
-      // Create reminder time (before khutbah)
-      const reminderTime = new Date(nextFriday);
-      reminderTime.setHours(khutbahHour, khutbahMinute - jumuahSettings.reminderMinutes, 0, 0);
+      // Create khutbah time, then subtract reminder minutes using proper date arithmetic
+      const khutbahTime = new Date(nextFriday);
+      khutbahTime.setHours(khutbahHour, khutbahMinute, 0, 0);
+      const reminderTime = new Date(khutbahTime.getTime() - jumuahSettings.reminderMinutes * 60000);
 
       // Only schedule if in the future
       if (reminderTime > now) {
@@ -337,7 +338,7 @@ export async function scheduleJumuahNotifications(
         notifications.push({
           id: notificationId,
           title: "Jumu'ah Prayer",
-          body: `Khutbah starts in ${jumuahSettings.reminderMinutes} min${masjidText}`,
+          body: `Khutbah starting soon${masjidText}`,
           schedule: {
             at: reminderTime,
             allowWhileIdle: true,

@@ -27,16 +27,20 @@ export function useNotifications() {
     );
   }, [location.coordinates, settings.surahKahf, settings.calculationMethod, settings.asrCalculation]);
 
+  // Debounce rescheduling to prevent race conditions when settings change rapidly
   useEffect(() => {
-    reschedule();
+    const timer = setTimeout(() => { reschedule(); }, 300);
+    return () => clearTimeout(timer);
   }, [reschedule]);
 
   useEffect(() => {
-    rescheduleJumuah();
+    const timer = setTimeout(() => { rescheduleJumuah(); }, 300);
+    return () => clearTimeout(timer);
   }, [rescheduleJumuah]);
 
   useEffect(() => {
-    rescheduleSurahKahf();
+    const timer = setTimeout(() => { rescheduleSurahKahf(); }, 300);
+    return () => clearTimeout(timer);
   }, [rescheduleSurahKahf]);
 
   // Set up notification click listener
