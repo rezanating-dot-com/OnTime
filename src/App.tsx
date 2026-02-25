@@ -17,6 +17,7 @@ import { SettingsModal } from './components/SettingsModal';
 import { Dashboard } from './components/Dashboard';
 import { OnboardingScreen } from './components/OnboardingScreen';
 import { TravelPromptDialog } from './components/TravelPromptDialog';
+import { NotificationPermissionDialog } from './components/NotificationPermissionDialog';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faKaaba } from '@fortawesome/free-solid-svg-icons';
 
@@ -204,6 +205,7 @@ function App() {
       <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} onBackRef={settingsBackRef} />
       <Dashboard isOpen={isDashboardOpen} onClose={() => setIsDashboardOpen(false)} />
       <TravelPromptDialog />
+      <NotificationPermissionDialog />
     </div>
   );
 }

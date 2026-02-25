@@ -16,6 +16,14 @@ export interface AthanPluginInterface {
 
   getExternalFilesDir(): Promise<{ path: string }>;
 
+  canScheduleExactAlarms(): Promise<{ value: boolean }>;
+
+  openExactAlarmSettings(): Promise<void>;
+
+  isIgnoringBatteryOptimizations(): Promise<{ value: boolean }>;
+
+  requestIgnoreBatteryOptimizations(): Promise<void>;
+
   startCompass(options?: { latitude?: number; longitude?: number }): Promise<void>;
 
   stopCompass(): Promise<void>;

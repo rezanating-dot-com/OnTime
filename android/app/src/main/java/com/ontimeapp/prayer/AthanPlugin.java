@@ -1,8 +1,10 @@
 package com.ontimeapp.prayer;
 
+import android.app.AlarmManager;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.content.Context;
+import android.content.Intent;
 import android.hardware.GeomagneticField;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
@@ -12,6 +14,8 @@ import android.media.AudioAttributes;
 import android.media.MediaPlayer;
 import android.net.Uri;
 import android.os.Build;
+import android.os.PowerManager;
+import android.provider.Settings;
 
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
@@ -263,6 +267,46 @@ public class AthanPlugin extends Plugin implements SensorEventListener {
         JSObject result = new JSObject();
         result.put("path", dir.getAbsolutePath());
         call.resolve(result);
+    }
+
+    @PluginMethod
+    public void canScheduleExactAlarms(PluginCall call) {
+        JSObject result = new JSObject();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            AlarmManager alarmManager = (AlarmManager) getContext().getSystemService(Context.ALARM_SERVICE);
+            result.put("value", alarmManager.canScheduleExactAlarms());
+        } else {
+            result.put("value", true);
+        }
+        call.resolve(result);
+    }
+
+    @PluginMethod
+    public void openExactAlarmSettings(PluginCall call) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            Intent intent = new Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM);
+            intent.setData(Uri.parse("package:" + getContext().getPackageName()));
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getContext().startActivity(intent);
+        }
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void isIgnoringBatteryOptimizations(PluginCall call) {
+        PowerManager pm = (PowerManager) getContext().getSystemService(Context.POWER_SERVICE);
+        JSObject result = new JSObject();
+        result.put("value", pm.isIgnoringBatteryOptimizations(getContext().getPackageName()));
+        call.resolve(result);
+    }
+
+    @PluginMethod
+    public void requestIgnoreBatteryOptimizations(PluginCall call) {
+        Intent intent = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
+        intent.setData(Uri.parse("package:" + getContext().getPackageName()));
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        getContext().startActivity(intent);
+        call.resolve();
     }
 
     private void stopMediaPlayer() {
