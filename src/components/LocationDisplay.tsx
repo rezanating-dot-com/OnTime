@@ -11,7 +11,7 @@ interface LocationDisplayProps {
 export function LocationDisplay({ onRefresh }: LocationDisplayProps) {
   const { location, isLoading, error, refreshLocation } = useLocation();
   const [showMap, setShowMap] = useState(false);
-  const { settings } = useSettings();
+  const { settings, isLoading: settingsLoading } = useSettings();
   // The date this subtitle is showing. Its own state, with its own timer, for
   // the same reason the globe keeps a minute tick: this component used to
   // re-render every second because App did, and that per-second render is
@@ -75,8 +75,8 @@ export function LocationDisplay({ onRefresh }: LocationDisplayProps) {
             </svg>
           )}
         </div>
-        {hijriLine && !isLoading && !error && (
-          <span className="text-[11px] opacity-80 leading-tight">{hijriLine}</span>
+        {hijriLine && !isLoading && !settingsLoading && !error && (
+          <span className="text-[11px] text-[var(--color-muted)] opacity-80 leading-tight">{hijriLine}</span>
         )}
       </button>
 
