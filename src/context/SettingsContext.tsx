@@ -28,6 +28,7 @@ const defaultDisplaySettings: DisplaySettings = {
   showCurrentPrayer: true,
   showNextPrayer: true,
   showSunnahCard: true,
+  hijriOffset: 0,
 };
 
 export const defaultAthanSettings: AthanSettings = {
