@@ -852,6 +852,33 @@ export function SettingsModal({ isOpen, onClose, onBackRef }: SettingsModalProps
                 />
               </div>
             </div>
+
+            {/* Hijri Date Adjustment */}
+            <div>
+              <label className="block text-sm text-[var(--color-muted)] mb-2">Hijri Date Adjustment</label>
+              <div className="grid grid-cols-5 gap-2">
+                {([-2, -1, 0, 1, 2] as const).map((value) => {
+                  const isActive = settings.display.hijriOffset === value;
+                  const label = value > 0 ? `+${value}` : `${value}`;
+                  return (
+                    <button
+                      key={value}
+                      onClick={() => updateDisplay({ hijriOffset: value })}
+                      className={`p-3 rounded-lg border text-center transition-all ${
+                        isActive
+                          ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/10'
+                          : 'border-[var(--color-border)] bg-[var(--color-card)]'
+                      }`}
+                    >
+                      <span className="text-sm font-medium text-[var(--color-text)]">{label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-xs text-[var(--color-muted)] mt-2">
+                Adjust if your local moon-sighting differs from the Saudi (Umm al-Qura) calendar.
+              </p>
+            </div>
           </div>
         )}
 
