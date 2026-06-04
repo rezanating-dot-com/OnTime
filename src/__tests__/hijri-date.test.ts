@@ -39,8 +39,11 @@ describe('User story: I see the current Hijri date alongside the Gregorian date'
     const dayZero = parseInt(zero.split(' ')[0], 10);
     const dayPlusOne = parseInt(plusOne.split(' ')[0], 10);
 
-    // Either the day advanced by 1, or the month rolled over and the new day is 1.
-    expect(dayPlusOne === dayZero + 1 || dayPlusOne === 1).toBe(true);
+    // Either the day advanced by 1, or the month rolled over (zero-day must be 29 or 30, plus-one must be 1).
+    expect(
+      dayPlusOne === dayZero + 1 ||
+      (dayZero >= 29 && dayPlusOne === 1)
+    ).toBe(true);
   });
 
   it('shifts the Hijri day backward when offset is -1', () => {
@@ -50,8 +53,11 @@ describe('User story: I see the current Hijri date alongside the Gregorian date'
     const dayZero = parseInt(zero.split(' ')[0], 10);
     const dayMinusOne = parseInt(minusOne.split(' ')[0], 10);
 
-    // Either the day retreated by 1, or the month rolled back and the new day is at month-end.
-    expect(dayMinusOne === dayZero - 1 || dayMinusOne >= 28).toBe(true);
+    // Either the day retreated by 1, or the month rolled back (zero-day must be 1, minus-one is end-of-month).
+    expect(
+      dayMinusOne === dayZero - 1 ||
+      (dayZero === 1 && dayMinusOne >= 28)
+    ).toBe(true);
   });
 
   it('clamps out-of-range offsets to ±2 defensively', () => {
