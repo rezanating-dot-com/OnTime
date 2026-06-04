@@ -854,8 +854,8 @@ export function SettingsModal({ isOpen, onClose, onBackRef }: SettingsModalProps
             </div>
 
             {/* Hijri Date Adjustment */}
-            <div>
-              <label className="block text-sm text-[var(--color-muted)] mb-2">Hijri Date Adjustment</label>
+            <div role="group" aria-labelledby="hijri-offset-label">
+              <label id="hijri-offset-label" className="block text-sm text-[var(--color-muted)] mb-2">Hijri Date Adjustment</label>
               <div className="grid grid-cols-5 gap-2">
                 {([-2, -1, 0, 1, 2] as const).map((value) => {
                   const isActive = settings.display.hijriOffset === value;
@@ -863,6 +863,8 @@ export function SettingsModal({ isOpen, onClose, onBackRef }: SettingsModalProps
                   return (
                     <button
                       key={value}
+                      aria-pressed={isActive}
+                      aria-label={`Hijri date offset ${label} days`}
                       onClick={() => updateDisplay({ hijriOffset: value })}
                       className={`p-3 rounded-lg border text-center transition-all ${
                         isActive
