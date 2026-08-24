@@ -160,6 +160,7 @@ export interface Settings {
   previousLocations: SavedLocation[];
   distanceUnit: 'miles' | 'km';
   designStyle: DesignStyle;
+  homeView: 'globe' | 'list';
 }
 
 export interface CityEntry {

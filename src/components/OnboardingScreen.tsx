@@ -10,12 +10,12 @@ interface OnboardingScreenProps {
 }
 
 export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
-  const [step, setStep] = useState<'welcome' | 'notifications' | 'location' | 'locating'>('welcome');
+  const [step, setStep] = useState<'welcome' | 'notifications' | 'location' | 'locating' | 'homeView'>('welcome');
 
   const [locationStatus, setLocationStatus] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const { refreshLocation } = useLocation();
-  const { addPreviousLocation } = useSettings();
+  const { addPreviousLocation, updateHomeView } = useSettings();
   const { setHomeBase } = useTravel();
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -56,7 +56,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
         if (result.location === 'denied') {
           if (timerRef.current) clearInterval(timerRef.current);
           setLocationStatus('Location denied — you can set it manually in Settings.');
-          setTimeout(onComplete, 1500);
+          setTimeout(() => setStep('homeView'), 1500);
           return;
         }
       }
@@ -77,17 +77,17 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
         });
       }
       setLocationStatus('Location found!');
-      setTimeout(onComplete, 600);
+      setTimeout(() => setStep('homeView'), 600);
     } catch {
       if (timerRef.current) clearInterval(timerRef.current);
       setLocationStatus('Could not get location — you can set it in Settings.');
-      setTimeout(onComplete, 1500);
+      setTimeout(() => setStep('homeView'), 1500);
     }
   }
 
   function skipLocation() {
     if (timerRef.current) clearInterval(timerRef.current);
-    onComplete();
+    setStep('homeView');
   }
 
   return (
@@ -209,6 +209,33 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
                 )}
               </>
             )}
+          </div>
+        )}
+
+        {step === 'homeView' && (
+          <div className="animate-fade-in">
+            <h2 className="text-2xl font-bold text-[var(--color-text)] mb-2">Choose Your Home Screen</h2>
+            <p className="text-[var(--color-muted)] mb-8 leading-relaxed">
+              You can always switch later from the header or Settings.
+            </p>
+            <button
+              onClick={() => { updateHomeView('globe'); onComplete(); }}
+              className="w-full py-4 mb-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] text-left px-4"
+            >
+              <div className="text-lg font-semibold text-[var(--color-text)]">Globe</div>
+              <div className="text-sm text-[var(--color-muted)] mt-0.5">
+                A full-page immersive view — stars, a live earth, and real cloud cover
+              </div>
+            </button>
+            <button
+              onClick={() => { updateHomeView('list'); onComplete(); }}
+              className="w-full py-4 rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] text-left px-4"
+            >
+              <div className="text-lg font-semibold text-[var(--color-text)]">List</div>
+              <div className="text-sm text-[var(--color-muted)] mt-0.5">
+                Today's dashboard — the prayer list, front and center
+              </div>
+            </button>
           </div>
         )}
 

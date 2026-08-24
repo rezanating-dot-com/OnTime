@@ -306,11 +306,11 @@ describe('subSolarPoint', () => {
   });
 
   it('wraps longitude to stay within [-180, 180]', () => {
-    const date = new Date(Date.UTC(2026, 2, 20, 23, 0, 0)); // 23:00 UTC → expect ~+165°, not +195°
+    const date = new Date(Date.UTC(2026, 2, 20, 23, 0, 0)); // 23:00 UTC → expect ~-165°, not -195°
     const point = subSolarPoint(date);
     expect(point.longitude).toBeGreaterThanOrEqual(-180);
     expect(point.longitude).toBeLessThanOrEqual(180);
-    expect(point.longitude).toBeCloseTo(165, 0);
+    expect(point.longitude).toBeCloseTo(-165, 0);
   });
 });
 ```
@@ -524,7 +524,11 @@ export async function getCloudImagery(now: Date): Promise<CloudImageResult> {
   }
 
   try {
-    const response = await CapacitorHttp.get({ url: `${GIBS_URL}&TIME=${today}` });
+    // responseType: 'blob' matters here — GIBS returns binary JPEG, not text/JSON.
+    // Omitting it would make CapacitorHttp's native layer decode the response as
+    // text on both Android and iOS, corrupting the image bytes. athanService.ts's
+    // downloadAthan sets this same option for its own binary MP3 fetch.
+    const response = await CapacitorHttp.get({ url: `${GIBS_URL}&TIME=${today}`, responseType: 'blob' });
     const base64Jpeg = response.data as string;
 
     try {
@@ -1634,7 +1638,13 @@ export class HomeGlobe extends Base3D<HomeGlobeData> {
         varying vec3 vNormal;
         void main() {
           vUv = uv;
-          vNormal = normalize(normalMatrix * normal);
+          // Deliberately the raw OBJECT-space normal, not normalMatrix * normal
+          // (which would put it in view space). sunDirection below is computed
+          // in that same object-space frame (the earth's un-spun local frame),
+          // so both sides of the fragment shader's dot product must match —
+          // transforming just one of them would compare vectors in different
+          // spaces and make the terminator drift with camera orbit and spin.
+          vNormal = normal;
           gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
         }
       `,
@@ -1683,6 +1693,17 @@ export class HomeGlobe extends Base3D<HomeGlobeData> {
     const worldSun = v3(normalize(latLonToVec3(latitude, longitude)));
     const localSun = worldSun.clone().applyQuaternion(this.earth.quaternion.clone().invert());
     this.earthMaterial.uniforms.sunDirection.value.copy(localSun);
+  }
+
+  /**
+   * Base3D.dispose() generically disposes each mesh's `.material.map`, but
+   * this earth's texture lives in a ShaderMaterial uniform instead — the
+   * generic path never sees it, so it would leak GPU memory on every
+   * Home-screen unmount otherwise.
+   */
+  dispose(): void {
+    (this.earthMaterial?.uniforms.dayMap.value as THREE.Texture | undefined)?.dispose();
+    super.dispose();
   }
 }
 ```

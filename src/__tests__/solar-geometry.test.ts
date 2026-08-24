@@ -13,6 +13,7 @@ import {
   greatCircleArc,
   angularSeparation,
   sunPath,
+  subSolarPoint,
 } from '../services/solarGeometry';
 
 const DEARBORN = { latitude: 42.3223, longitude: -83.1763 };
@@ -224,5 +225,33 @@ describe('angularSeparation', () => {
     // Dearborn to Makkah is roughly 10,300 km, about 93 degrees of arc.
     expect(angularSeparation(DEARBORN, MECCA)).toBeGreaterThan(80);
     expect(angularSeparation(DEARBORN, MECCA)).toBeLessThan(100);
+  });
+});
+
+describe('subSolarPoint', () => {
+  it('matches solarDeclination for the sub-solar latitude', () => {
+    const date = new Date(Date.UTC(2026, 5, 21, 12, 0, 0)); // June solstice, noon UTC
+    const point = subSolarPoint(date);
+    expect(point.latitude).toBeCloseTo(solarDeclination(date), 10);
+  });
+
+  it('places the sub-solar longitude near 0° at 12:00 UTC', () => {
+    const date = new Date(Date.UTC(2026, 2, 20, 12, 0, 0));
+    const point = subSolarPoint(date);
+    expect(Math.abs(point.longitude)).toBeLessThan(1);
+  });
+
+  it('places the sub-solar longitude near 180° at 00:00 UTC', () => {
+    const date = new Date(Date.UTC(2026, 2, 20, 0, 0, 0));
+    const point = subSolarPoint(date);
+    expect(Math.abs(Math.abs(point.longitude) - 180)).toBeLessThan(1);
+  });
+
+  it('wraps longitude to stay within [-180, 180]', () => {
+    const date = new Date(Date.UTC(2026, 2, 20, 23, 0, 0)); // 23:00 UTC → expect ~-165°, not -195°
+    const point = subSolarPoint(date);
+    expect(point.longitude).toBeGreaterThanOrEqual(-180);
+    expect(point.longitude).toBeLessThanOrEqual(180);
+    expect(point.longitude).toBeCloseTo(-165, 0);
   });
 });

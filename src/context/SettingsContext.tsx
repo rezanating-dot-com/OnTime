@@ -78,6 +78,7 @@ const defaultSettings: Settings = {
   previousLocations: [],
   distanceUnit: 'miles',
   designStyle: 'classic',
+  homeView: 'list',
 };
 
 interface SettingsContextType {
@@ -96,6 +97,7 @@ interface SettingsContextType {
   updateAthan: (updates: Partial<AthanSettings>) => void;
   updateDistanceUnit: (unit: 'miles' | 'km') => void;
   updateDesignStyle: (style: DesignStyle) => void;
+  updateHomeView: (view: 'globe' | 'list') => void;
   addPreviousLocation: (loc: SavedLocation) => void;
   removePreviousLocation: (index: number) => void;
   isLoading: boolean;
@@ -183,6 +185,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
           previousLocations: parsed.previousLocations || [],
           distanceUnit: parsed.distanceUnit || 'miles',
           designStyle: parsed.designStyle || 'classic',
+          homeView: parsed.homeView === 'globe' ? 'globe' : 'list',
         });
       }
     } catch (error) {
@@ -313,6 +316,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     setSettings((prev) => ({ ...prev, designStyle: style }));
   }, []);
 
+  const updateHomeView = useCallback((view: 'globe' | 'list') => {
+    setSettings((prev) => ({ ...prev, homeView: view }));
+  }, []);
+
   const addPreviousLocation = useCallback((loc: SavedLocation) => {
     setSettings((prev) => {
       // Don't add duplicates (same city name and close coordinates)
@@ -351,6 +358,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     updateAthan,
     updateDistanceUnit,
     updateDesignStyle,
+    updateHomeView,
     addPreviousLocation,
     removePreviousLocation,
     isLoading,
@@ -371,6 +379,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     updateAthan,
     updateDistanceUnit,
     updateDesignStyle,
+    updateHomeView,
     addPreviousLocation,
     removePreviousLocation,
   ]);

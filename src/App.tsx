@@ -16,6 +16,7 @@ import { IslamicCountdownTimer } from './components/IslamicCountdownTimer';
 import { GirihBackground } from './components/IslamicPatterns';
 import { LocationDisplay } from './components/LocationDisplay';
 import { SunDomeCard } from './components/SunDomeCard';
+import { HomeGlobeScreen } from './components/HomeGlobeScreen';
 import { OnboardingScreen } from './components/OnboardingScreen';
 import { TravelPromptDialog } from './components/TravelPromptDialog';
 import { NotificationPermissionDialog } from './components/NotificationPermissionDialog';
@@ -39,7 +40,7 @@ function App() {
   const { prayers, currentPrayer, nextPrayer, nextPrayerTime, countdown } = usePrayerTimes();
   const { effectiveTheme, updatePrayerTimes } = useTheme();
   const { travelState } = useTravel();
-  const { settings } = useSettings();
+  const { settings, updateHomeView } = useSettings();
 
   // Check if onboarding is needed
   useEffect(() => {
@@ -119,6 +120,14 @@ function App() {
   }
 
   const isIslamic = settings.designStyle === 'islamic';
+  const isGlobeHome = settings.homeView === 'globe';
+  const showGlobeLayer = isGlobeHome && !isQiblaOpen && !isDashboardOpen && !isSettingsOpen;
+  const headerGlowVars = isGlobeHome
+    ? ({ '--color-muted': 'rgba(245,246,248,0.6)', '--color-text': 'rgba(245,246,248,0.95)' } as React.CSSProperties)
+    : undefined;
+  const headerGlowBg: React.CSSProperties | undefined = isGlobeHome
+    ? { background: 'linear-gradient(to bottom, rgba(3,5,10,0.5), transparent)', backdropFilter: 'blur(6px)' }
+    : undefined;
 
   return (
     <div className="min-h-screen bg-[var(--color-background)] safe-area-bottom flex flex-col relative">
@@ -134,10 +143,12 @@ function App() {
         </>
       )}
 
+      {showGlobeLayer && <HomeGlobeScreen />}
+
       <div className="max-w-lg mx-auto w-full flex-1 overflow-y-auto relative z-10">
 {/* Top Bar - sticky below status bar */}
         {isIslamic ? (
-          <header className="sticky top-0 z-40 safe-area-top px-5 pt-2 pb-3.5 flex items-center justify-between" style={{ background: 'var(--color-background)' }}>
+          <header className="sticky top-0 z-40 safe-area-top px-5 pt-2 pb-3.5 flex items-center justify-between" style={{ ...headerGlowVars, ...(headerGlowBg ?? { background: 'var(--color-background)' }) }}>
             {/* Settings */}
             <button
               onClick={() => setIsSettingsOpen(true)}
@@ -177,6 +188,28 @@ function App() {
                 </svg>
               </button>
               <button
+                onClick={() => updateHomeView(isGlobeHome ? 'list' : 'globe')}
+                className="flex items-center justify-center"
+                style={{
+                  width: 40, height: 40, borderRadius: 12,
+                  background: 'color-mix(in srgb, var(--color-primary) 6%, transparent)',
+                  border: '1px solid color-mix(in srgb, var(--color-primary) 15%, transparent)',
+                }}
+                aria-label={isGlobeHome ? 'Switch to list view' : 'Switch to globe view'}
+                aria-pressed={isGlobeHome}
+              >
+                {isGlobeHome ? (
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" strokeWidth="1.6">
+                    <path strokeLinecap="round" d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>
+                  </svg>
+                ) : (
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" strokeWidth="1.6">
+                    <circle cx="12" cy="12" r="9"/>
+                    <path d="M3 12h18M12 3c2.5 2.5 4 5.5 4 9s-1.5 6.5-4 9c-2.5-2.5-4-5.5-4-9s1.5-6.5 4-9z"/>
+                  </svg>
+                )}
+              </button>
+              <button
                 onClick={() => setIsDashboardOpen(true)}
                 className="flex items-center justify-center"
                 style={{
@@ -195,7 +228,7 @@ function App() {
             </div>
           </header>
         ) : (
-          <header className="sticky top-0 z-40 safe-area-top bg-[var(--color-background)] px-4 pt-2 pb-3 flex items-center justify-between">
+          <header className={`sticky top-0 z-40 safe-area-top px-4 pt-2 pb-3 flex items-center justify-between ${isGlobeHome ? '' : 'bg-[var(--color-background)]'}`} style={{ ...headerGlowVars, ...headerGlowBg }}>
             <button
               onClick={() => setIsSettingsOpen(true)}
               className="p-2 -ml-2 rounded-full hover:bg-[var(--color-card)] transition-colors"
@@ -218,6 +251,23 @@ function App() {
                 <FontAwesomeIcon icon={faKaaba} className="w-5 h-5 text-[var(--color-muted)]" />
               </button>
               <button
+                onClick={() => updateHomeView(isGlobeHome ? 'list' : 'globe')}
+                className="p-2 rounded-full hover:bg-[var(--color-card)] transition-colors"
+                aria-label={isGlobeHome ? 'Switch to list view' : 'Switch to globe view'}
+                aria-pressed={isGlobeHome}
+              >
+                {isGlobeHome ? (
+                  <svg className="w-5 h-5 text-[var(--color-muted)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}>
+                    <path strokeLinecap="round" d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>
+                  </svg>
+                ) : (
+                  <svg className="w-5 h-5 text-[var(--color-muted)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}>
+                    <circle cx="12" cy="12" r="9"/>
+                    <path d="M3 12h18M12 3c2.5 2.5 4 5.5 4 9s-1.5 6.5-4 9c-2.5-2.5-4-5.5-4-9s1.5-6.5 4-9z"/>
+                  </svg>
+                )}
+              </button>
+              <button
                 onClick={() => setIsDashboardOpen(true)}
                 className="p-2 -mr-2 rounded-full hover:bg-[var(--color-card)] transition-colors"
                 aria-label="Open dashboard"
@@ -235,7 +285,7 @@ function App() {
 
         {/* Today's Sky — dropped while a full-screen overlay covers it, so we
             aren't running a hidden WebGL context alongside the qibla globe. */}
-        {!isQiblaOpen && !isDashboardOpen && !isSettingsOpen && <SunDomeCard prayers={prayers} />}
+        {!isGlobeHome && !isQiblaOpen && !isDashboardOpen && !isSettingsOpen && <SunDomeCard prayers={prayers} />}
 
         {/* Current Prayer & Countdown */}
         {(currentPrayer || nextPrayer) && (
@@ -252,6 +302,7 @@ function App() {
                 isTraveling={travelState.isTraveling}
                 travelState={travelState}
                 display={settings.display}
+                glow={isGlobeHome}
               />
             ) : (
               <CountdownTimer
@@ -265,40 +316,43 @@ function App() {
                 isTraveling={travelState.isTraveling}
                 travelState={travelState}
                 display={settings.display}
+                glow={isGlobeHome}
               />
             )}
           </div>
         )}
 
         {/* Travel Banner + Prayer Table */}
-        <div className={`mb-5 ${travelState.isTraveling ? 'rounded-lg border-2 border-amber-500/30 overflow-hidden bg-[var(--color-card)]' : ''}`}>
-          {travelState.isTraveling && (
-            <div className="px-4 py-3 bg-amber-500/10">
-              <div className="flex items-center gap-2">
-                <span className="text-amber-600 text-sm font-semibold">Travel Mode</span>
-                {travelState.distanceFromHomeKm !== null && (
-                  <span className="text-amber-600/70 text-xs">
-                    {formatDistance(travelState.distanceFromHomeKm, settings.distanceUnit)} from home
-                  </span>
-                )}
+        {!isGlobeHome && (
+          <div className={`mb-5 ${travelState.isTraveling ? 'rounded-lg border-2 border-amber-500/30 overflow-hidden bg-[var(--color-card)]' : ''}`}>
+            {travelState.isTraveling && (
+              <div className="px-4 py-3 bg-amber-500/10">
+                <div className="flex items-center gap-2">
+                  <span className="text-amber-600 text-sm font-semibold">Travel Mode</span>
+                  {travelState.distanceFromHomeKm !== null && (
+                    <span className="text-amber-600/70 text-xs">
+                      {formatDistance(travelState.distanceFromHomeKm, settings.distanceUnit)} from home
+                    </span>
+                  )}
+                </div>
+                <p className="text-amber-600/60 text-xs mt-0.5">Qasr prayers active — shortened to 2 rak'ah</p>
               </div>
-              <p className="text-amber-600/60 text-xs mt-0.5">Qasr prayers active — shortened to 2 rak'ah</p>
-            </div>
-          )}
-          {isIslamic ? (
-            <IslamicPrayerTable
-              prayers={prayers}
-              currentPrayer={currentPrayer}
-              nextPrayerTime={nextPrayerTime}
-            />
-          ) : (
-            <PrayerTable
-              prayers={prayers}
-              currentPrayer={currentPrayer}
-              nextPrayerTime={nextPrayerTime}
-            />
-          )}
-        </div>
+            )}
+            {isIslamic ? (
+              <IslamicPrayerTable
+                prayers={prayers}
+                currentPrayer={currentPrayer}
+                nextPrayerTime={nextPrayerTime}
+              />
+            ) : (
+              <PrayerTable
+                prayers={prayers}
+                currentPrayer={currentPrayer}
+                nextPrayerTime={nextPrayerTime}
+              />
+            )}
+          </div>
+        )}
 
         </div>
       </div>

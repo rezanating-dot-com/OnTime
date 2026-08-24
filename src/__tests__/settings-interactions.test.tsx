@@ -166,4 +166,41 @@ describe('User story: I can customize my app settings', () => {
     const displaySection = await screen.findByText('Display Cards');
     expect(displaySection).toBeInTheDocument();
   });
+
+  it('shows the home view picker with Globe and List options', async () => {
+    const user = userEvent.setup();
+
+    await act(async () => {
+      renderSettingsModal();
+    });
+
+    const appearanceItem = await screen.findByText('Appearance');
+    await user.click(appearanceItem);
+
+    const globe = await screen.findByText('Globe');
+    const list = await screen.findByText('List');
+    expect(globe).toBeInTheDocument();
+    expect(list).toBeInTheDocument();
+  });
+
+  it('switching to Globe home view updates the setting', async () => {
+    const user = userEvent.setup();
+    let result: ReturnType<typeof renderSettingsModal>;
+
+    await act(async () => {
+      result = renderSettingsModal({ homeView: 'list' });
+    });
+
+    const appearanceItem = await screen.findByText('Appearance');
+    await user.click(appearanceItem);
+
+    const globeBtn = await screen.findByText('Globe');
+    await user.click(globeBtn);
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 50));
+    });
+
+    expect(result!.getCaptured()!.homeView).toBe('globe');
+  });
 });

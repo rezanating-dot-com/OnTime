@@ -65,6 +65,7 @@ export function SettingsModal({ isOpen, onClose, onBackRef }: SettingsModalProps
     updateAthan,
     updateDistanceUnit,
     updateDesignStyle,
+    updateHomeView,
     addPreviousLocation,
     removePreviousLocation,
   } = useSettings();
@@ -692,6 +693,35 @@ export function SettingsModal({ isOpen, onClose, onBackRef }: SettingsModalProps
                 >
                   <div className="text-sm font-medium text-[var(--color-text)]">Islamic</div>
                   <div className="text-xs text-[var(--color-muted)] mt-0.5">Geometric patterns, Arabic</div>
+                </button>
+              </div>
+            </div>
+
+            {/* Home View */}
+            <div>
+              <label className="block text-sm text-[var(--color-muted)] mb-2">Home View</label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => updateHomeView('globe')}
+                  className={`p-3 rounded-lg border text-left transition-all ${
+                    settings.homeView === 'globe'
+                      ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/10'
+                      : 'border-[var(--color-border)] bg-[var(--color-card)]'
+                  }`}
+                >
+                  <div className="text-sm font-medium text-[var(--color-text)]">Globe</div>
+                  <div className="text-xs text-[var(--color-muted)] mt-0.5">Immersive full-page view</div>
+                </button>
+                <button
+                  onClick={() => updateHomeView('list')}
+                  className={`p-3 rounded-lg border text-left transition-all ${
+                    settings.homeView === 'list'
+                      ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/10'
+                      : 'border-[var(--color-border)] bg-[var(--color-card)]'
+                  }`}
+                >
+                  <div className="text-sm font-medium text-[var(--color-text)]">List</div>
+                  <div className="text-xs text-[var(--color-muted)] mt-0.5">Today's dashboard</div>
                 </button>
               </div>
             </div>

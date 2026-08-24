@@ -206,3 +206,19 @@ export function sunPath(
   }
   return { above, below };
 }
+
+/**
+ * The lat/lon currently directly under the sun. Ignores the equation of
+ * time (up to ~16 min real-world skew) — invisible on a globe this size,
+ * and it keeps the function a one-liner off the UTC clock.
+ */
+export function subSolarPoint(date: Date): { latitude: number; longitude: number } {
+  const latitude = solarDeclination(date);
+  const utcHours = date.getUTCHours() + date.getUTCMinutes() / 60 + date.getUTCSeconds() / 3600;
+  const longitude = normalizeLongitude(-(utcHours - 12) * 15);
+  return { latitude, longitude };
+}
+
+function normalizeLongitude(lon: number): number {
+  return ((((lon + 180) % 360) + 360) % 360) - 180;
+}

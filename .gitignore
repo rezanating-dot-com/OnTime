@@ -34,3 +34,4 @@ android/build/
 android/capacitor-cordova-android-plugins/build/
 
 .worktrees/
+.superpowers/

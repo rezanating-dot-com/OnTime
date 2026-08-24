@@ -13,6 +13,8 @@ interface IslamicCountdownTimerProps {
   isTraveling?: boolean;
   travelState?: TravelState;
   display: DisplaySettings;
+  /** Boxless style for the Home Globe view: no card chrome, text floats with a drop shadow. */
+  glow?: boolean;
 }
 
 const ARABIC_NAMES: Record<string, string> = {
@@ -41,7 +43,7 @@ const SUNNAH_COUNTS_TRAVEL: Record<PrayerName, { before: number; after: number }
   isha: { before: 0, after: 0 },
 };
 
-export function IslamicCountdownTimer({ currentPrayer, currentPrayerTime, nextPrayer, nextPrayerTime, hours, minutes, seconds, isTraveling = false, travelState, display }: IslamicCountdownTimerProps) {
+export function IslamicCountdownTimer({ currentPrayer, currentPrayerTime, nextPrayer, nextPrayerTime, hours, minutes, seconds, isTraveling = false, travelState, display, glow = false }: IslamicCountdownTimerProps) {
   const formatNumber = (n: number) => n.toString().padStart(2, '0');
   const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
   const currentLabel = currentPrayer ? capitalize(currentPrayer) : null;
@@ -86,13 +88,18 @@ export function IslamicCountdownTimer({ currentPrayer, currentPrayerTime, nextPr
   const showCurrentTier = display.showCurrentPrayer && currentPrayer && currentPrayer !== 'sunrise';
   const showNextTier = display.showNextPrayer && nextPrayer;
 
+  const GLOW_TEXT_SHADOW = '0 2px 20px rgba(0,0,0,0.75), 0 1px 3px rgba(0,0,0,0.9)';
+  const glowText = glow ? 'rgba(245,246,248,0.96)' : 'var(--color-text)';
+  const glowMuted = glow ? 'rgba(245,246,248,0.6)' : 'var(--color-muted)';
+  const glowShadow = glow ? GLOW_TEXT_SHADOW : 'none';
+
   return (
     <div className="space-y-3.5">
       {/* ─── Unified Two-Tier Card ─── */}
       {(showCurrentTier || showNextTier) && (
         <div
           className="relative rounded-[20px] overflow-hidden"
-          style={{
+          style={glow ? undefined : {
             background: 'linear-gradient(135deg, color-mix(in srgb, var(--color-primary) 12%, transparent), color-mix(in srgb, var(--color-background) 70%, transparent))',
             border: `1px solid ${isUrgent && showCurrentTier ? 'rgba(220, 90, 70, 0.45)' : 'color-mix(in srgb, var(--color-primary) 28%, transparent)'}`,
             boxShadow: isUrgent && showCurrentTier
@@ -100,16 +107,22 @@ export function IslamicCountdownTimer({ currentPrayer, currentPrayerTime, nextPr
               : 'none',
           }}
         >
-          {/* Girih pattern background */}
-          <div className="absolute inset-0 opacity-35">
-            <GirihBackground opacity={0.08} id="current-bg"/>
-          </div>
+          {/* Girih pattern background (card mode only — reads as noise floating over the globe) */}
+          {!glow && (
+            <div className="absolute inset-0 opacity-35">
+              <GirihBackground opacity={0.08} id="current-bg"/>
+            </div>
+          )}
 
-          {/* Corner ornaments */}
-          <div className="absolute top-2.5 left-2.5"><CornerOrnament rotate={0}/></div>
-          <div className="absolute top-2.5 right-2.5"><CornerOrnament rotate={90}/></div>
-          <div className="absolute bottom-2.5 left-2.5"><CornerOrnament rotate={270}/></div>
-          <div className="absolute bottom-2.5 right-2.5"><CornerOrnament rotate={180}/></div>
+          {/* Corner ornaments (card mode only) */}
+          {!glow && (
+            <>
+              <div className="absolute top-2.5 left-2.5"><CornerOrnament rotate={0}/></div>
+              <div className="absolute top-2.5 right-2.5"><CornerOrnament rotate={90}/></div>
+              <div className="absolute bottom-2.5 left-2.5"><CornerOrnament rotate={270}/></div>
+              <div className="absolute bottom-2.5 right-2.5"><CornerOrnament rotate={180}/></div>
+            </>
+          )}
 
           {/* ── Top tier: Current prayer (compact) ── */}
           {showCurrentTier && (
@@ -117,23 +130,23 @@ export function IslamicCountdownTimer({ currentPrayer, currentPrayerTime, nextPr
               {/* Row 1: NOW label + name + Arabic + urgency badge */}
               <div className="flex justify-between items-center">
                 <div className="flex items-baseline gap-2.5">
-                  <div className="text-[11px] tracking-[2.5px] uppercase font-medium" style={{ fontFamily: 'Inter, system-ui', color: 'var(--color-muted)' }}>
+                  <div className="text-[11px] tracking-[2.5px] uppercase font-medium" style={{ fontFamily: 'Inter, system-ui', color: glowMuted, textShadow: glowShadow }}>
                     Now
                   </div>
-                  <div className="text-2xl leading-none tracking-wide" style={{ fontFamily: '"Cormorant Garamond", serif', fontWeight: 500, color: 'var(--color-text)' }}>
+                  <div className="text-2xl leading-none tracking-wide" style={{ fontFamily: '"Cormorant Garamond", serif', fontWeight: 500, color: glowText, textShadow: glowShadow }}>
                     {currentLabel}
                   </div>
                   {currentArabic && (
-                    <div className="text-base leading-none opacity-70" style={{ fontFamily: '"Amiri", serif', color: 'var(--color-primary)' }}>
+                    <div className="text-base leading-none opacity-70" style={{ fontFamily: '"Amiri", serif', color: 'var(--color-primary)', textShadow: glowShadow }}>
                       {currentArabic}
                     </div>
                   )}
                 </div>
                 {isUrgent && (
                   <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-[10px] shrink-0 ml-2"
-                    style={{ background: 'rgba(220, 90, 70, 0.15)', border: '1px solid rgba(220, 90, 70, 0.35)' }}>
-                    <div className="w-1.5 h-1.5 rounded-full bg-[#dc5a46] islamic-pulse"/>
-                    <span className="text-[10px] text-[#e88a76] font-semibold tracking-wide" style={{ fontFamily: 'Inter' }}>
+                    style={glow ? { textShadow: glowShadow } : { background: 'rgba(220, 90, 70, 0.15)', border: '1px solid rgba(220, 90, 70, 0.35)' }}>
+                    {!glow && <div className="w-1.5 h-1.5 rounded-full bg-[#dc5a46] islamic-pulse"/>}
+                    <span className="text-[10px] font-semibold tracking-wide" style={{ fontFamily: 'Inter', color: glow ? '#ff8a75' : '#e88a76' }}>
                       ENDING SOON
                     </span>
                   </div>
@@ -150,22 +163,23 @@ export function IslamicCountdownTimer({ currentPrayer, currentPrayerTime, nextPr
                         fontFamily: '"JetBrains Mono", ui-monospace, monospace',
                         fontSize: 18, fontWeight: 500, letterSpacing: 0.5,
                         fontVariantNumeric: 'tabular-nums',
-                        color: isUrgent ? '#e88a76' : 'var(--color-text)',
+                        color: isUrgent ? (glow ? '#ff8a75' : '#e88a76') : glowText,
+                        textShadow: glowShadow,
                       }}
                     >
                       {formatNumber(elapsed.h)}:{formatNumber(elapsed.m)}:{formatNumber(elapsed.s)}
                     </div>
-                    <div className="text-[11px]" style={{ color: 'var(--color-muted)' }}>ago</div>
+                    <div className="text-[11px]" style={{ color: glowMuted, textShadow: glowShadow }}>ago</div>
                   </div>
                 ) : (
-                  <span className="text-sm font-medium" style={{ color: 'var(--color-primary)' }}>Active</span>
+                  <span className="text-sm font-medium" style={{ color: 'var(--color-primary)', textShadow: glowShadow }}>Active</span>
                 )}
 
                 {hasSunnah && (
-                  <div className="flex items-center gap-1.5" style={{ fontSize: 11, color: 'var(--color-muted)' }}>
-                    <CrescentStar size={12}/>
+                  <div className="flex items-center gap-1.5" style={{ fontSize: 11, color: glowMuted, textShadow: glowShadow }}>
+                    {!glow && <CrescentStar size={12}/>}
                     {sunnah!.before > 0 && (
-                      <span style={{ color: 'var(--color-text)' }}>
+                      <span style={{ color: glowText }}>
                         <span className="text-sm font-semibold" style={{ fontFamily: '"Cormorant Garamond", serif' }}>{sunnah!.before}</span>
                         <span className="opacity-70 ml-1">before</span>
                       </span>
@@ -174,7 +188,7 @@ export function IslamicCountdownTimer({ currentPrayer, currentPrayerTime, nextPr
                       <span className="opacity-40">&middot;</span>
                     )}
                     {sunnah!.after > 0 && (
-                      <span style={{ color: 'var(--color-text)' }}>
+                      <span style={{ color: glowText }}>
                         <span className="text-sm font-semibold" style={{ fontFamily: '"Cormorant Garamond", serif' }}>{sunnah!.after}</span>
                         <span className="opacity-70 ml-1">after</span>
                       </span>
@@ -183,31 +197,33 @@ export function IslamicCountdownTimer({ currentPrayer, currentPrayerTime, nextPr
                 )}
               </div>
 
-              {/* Progress bar */}
-              <div className="relative mt-2.5 h-[3px] rounded-sm" style={{ background: 'color-mix(in srgb, var(--color-text) 8%, transparent)' }}>
-                <div
-                  className="absolute inset-0 rounded-sm transition-all duration-1000"
-                  style={{
-                    width: `${Math.min(100, progress * 100)}%`,
-                    background: isUrgent
-                      ? 'linear-gradient(90deg, var(--color-primary), #dc5a46)'
-                      : 'linear-gradient(90deg, var(--color-primary), var(--color-text))',
-                    boxShadow: isUrgent ? '0 0 10px rgba(220, 90, 70, 0.4)' : 'none',
-                  }}
-                />
-              </div>
+              {/* Progress bar (card mode only — a bare bar reads oddly floating on the globe) */}
+              {!glow && (
+                <div className="relative mt-2.5 h-[3px] rounded-sm" style={{ background: 'color-mix(in srgb, var(--color-text) 8%, transparent)' }}>
+                  <div
+                    className="absolute inset-0 rounded-sm transition-all duration-1000"
+                    style={{
+                      width: `${Math.min(100, progress * 100)}%`,
+                      background: isUrgent
+                        ? 'linear-gradient(90deg, var(--color-primary), #dc5a46)'
+                        : 'linear-gradient(90deg, var(--color-primary), var(--color-text))',
+                      boxShadow: isUrgent ? '0 0 10px rgba(220, 90, 70, 0.4)' : 'none',
+                    }}
+                  />
+                </div>
+              )}
             </div>
           )}
 
           {/* ── Separator ── */}
-          {showCurrentTier && showNextTier && (
+          {showCurrentTier && showNextTier && !glow && (
             <div className="relative h-px" style={{ background: 'linear-gradient(90deg, transparent, color-mix(in srgb, var(--color-primary) 25%, transparent), transparent)' }}/>
           )}
 
           {/* ── Bottom tier: Next prayer hero countdown ── */}
           {showNextTier && (
             <div className="relative text-center" style={{ padding: '14px 22px 18px' }}>
-              <div className="text-[10px] tracking-[2.5px] uppercase font-medium mb-1.5" style={{ fontFamily: 'Inter, system-ui', color: 'var(--color-muted)' }}>
+              <div className="text-[10px] tracking-[2.5px] uppercase font-medium mb-1.5" style={{ fontFamily: 'Inter, system-ui', color: glowMuted, textShadow: glowShadow }}>
                 Next &middot; {nextLabel}
                 {nextArabic && (
                   <span className="ml-1.5 opacity-60" style={{ fontFamily: '"Amiri", serif', fontSize: 13, color: 'var(--color-primary)', letterSpacing: 0 }}>
@@ -219,7 +235,8 @@ export function IslamicCountdownTimer({ currentPrayer, currentPrayerTime, nextPr
                 fontFamily: '"JetBrains Mono", ui-monospace, monospace',
                 fontSize: 44, letterSpacing: 2, fontWeight: 300,
                 fontVariantNumeric: 'tabular-nums',
-                color: 'var(--color-text)',
+                color: glowText,
+                textShadow: glowShadow,
                 lineHeight: 1,
               }}>
                 {formatNumber(hours)}:{formatNumber(minutes)}:{formatNumber(seconds)}
@@ -233,19 +250,19 @@ export function IslamicCountdownTimer({ currentPrayer, currentPrayerTime, nextPr
       {display.showSunnahCard && isIshraqTime && (
         <div
           className="rounded-[14px] p-3"
-          style={{
+          style={glow ? undefined : {
             background: 'color-mix(in srgb, var(--color-primary) 4%, transparent)',
             border: '1px solid color-mix(in srgb, var(--color-primary) 12%, transparent)',
           }}
         >
-          <p className="text-xs uppercase tracking-wide mb-2" style={{ fontFamily: 'Inter', color: 'var(--color-muted)' }}>
+          <p className="text-xs uppercase tracking-wide mb-2" style={{ fontFamily: 'Inter', color: glowMuted, textShadow: glowShadow }}>
             Optional Prayer
           </p>
           <div className="flex items-center justify-between">
-            <p className="text-lg" style={{ fontFamily: '"Cormorant Garamond", serif', fontWeight: 500, color: 'var(--color-text)' }}>
+            <p className="text-lg" style={{ fontFamily: '"Cormorant Garamond", serif', fontWeight: 500, color: glowText, textShadow: glowShadow }}>
               Ishraq / Duha
             </p>
-            <p className="text-sm" style={{ color: 'var(--color-muted)' }}>
+            <p className="text-sm" style={{ color: glowMuted, textShadow: glowShadow }}>
               2-8 rak'at (after sunrise)
             </p>
           </div>
@@ -254,11 +271,11 @@ export function IslamicCountdownTimer({ currentPrayer, currentPrayerTime, nextPr
 
       {/* Fallback */}
       {!nextPrayer && !isIshraqTime && currentPrayer && !showCurrentTier && (
-        <div className="rounded-[14px] p-3 text-center" style={{
+        <div className="rounded-[14px] p-3 text-center" style={glow ? undefined : {
           background: 'color-mix(in srgb, var(--color-primary) 4%, transparent)',
           border: '1px solid color-mix(in srgb, var(--color-primary) 12%, transparent)',
         }}>
-          <p className="text-sm" style={{ color: 'var(--color-muted)' }}>{currentLabel} time</p>
+          <p className="text-sm" style={{ color: glowMuted, textShadow: glowShadow }}>{currentLabel} time</p>
         </div>
       )}
 

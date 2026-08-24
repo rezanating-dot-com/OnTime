@@ -3,6 +3,7 @@ import type { Base3D } from './base3d';
 import { needsRelativePosition } from '../../utils/layout';
 import { SunDome, type SunDomeData } from './sunDome';
 import { QiblaGlobe, type QiblaGlobeData } from './qiblaGlobe';
+import { HomeGlobe, type HomeGlobeData } from './homeGlobe';
 import { KaabaMini } from './kaabaMini';
 
 /**
@@ -113,8 +114,17 @@ export function QiblaGlobeView(props: {
   return <SceneHost Scene={QiblaGlobe} {...props} />;
 }
 
+export function HomeGlobeView(props: {
+  data: HomeGlobeData;
+  className?: string;
+  style?: CSSProperties;
+  fallback?: React.ReactNode;
+}) {
+  return <SceneHost Scene={HomeGlobe} {...props} />;
+}
+
 export function KaabaMiniView(props: { className?: string; style?: CSSProperties }) {
   return <SceneHost Scene={KaabaMini} data={undefined as void} {...props} />;
 }
 
-export type { SunDomeData, QiblaGlobeData };
+export type { SunDomeData, QiblaGlobeData, HomeGlobeData };

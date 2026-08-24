@@ -12,6 +12,8 @@ interface CountdownTimerProps {
   isTraveling?: boolean;
   travelState?: TravelState;
   display: DisplaySettings;
+  /** Boxless style for the Home Globe view: no card chrome, text floats with a drop shadow. */
+  glow?: boolean;
 }
 
 // Sunnah prayers associated with each fard prayer
@@ -34,7 +36,12 @@ const SUNNAH_PRAYERS_TRAVEL: Record<PrayerName, { before?: string; after?: strin
   isha: { after: 'Witr' },
 };
 
-export function CountdownTimer({ currentPrayer, currentPrayerTime, nextPrayer, nextPrayerTime, hours, minutes, seconds, isTraveling = false, travelState, display }: CountdownTimerProps) {
+const GLOW_TEXT_SHADOW = '0 2px 20px rgba(0,0,0,0.75), 0 1px 3px rgba(0,0,0,0.9)';
+const GLOW_TEXT = 'rgba(245,246,248,0.96)';
+const GLOW_MUTED = 'rgba(245,246,248,0.6)';
+const GLOW_URGENT = '#ff8a75';
+
+export function CountdownTimer({ currentPrayer, currentPrayerTime, nextPrayer, nextPrayerTime, hours, minutes, seconds, isTraveling = false, travelState, display, glow = false }: CountdownTimerProps) {
   const formatNumber = (n: number) => n.toString().padStart(2, '0');
 
   const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -81,7 +88,7 @@ export function CountdownTimer({ currentPrayer, currentPrayerTime, nextPrayer, n
 
   // Red urgency only kicks in past 60% of the prayer window
   const isUrgent = progress >= 0.6;
-  // Border width scales from 1px to 2px only during urgent phase
+  // Border width scales from 1px to 2px only during urgent phase (card mode only)
   const borderWidth = isUrgent ? 1 + ((progress - 0.6) / 0.4) : 1;
 
   const sunnahSource = isTraveling ? SUNNAH_PRAYERS_TRAVEL : SUNNAH_PRAYERS;
@@ -109,39 +116,44 @@ export function CountdownTimer({ currentPrayer, currentPrayerTime, nextPrayer, n
   const naflPrayer = prayablePrayers.find(p => p.type === 'nafl');
   const regularPrayers = prayablePrayers.filter(p => p.type !== 'nafl');
 
+  const cardClass = glow ? '' : 'bg-[var(--color-card)] rounded-lg p-3 border';
+  const labelColor = glow ? GLOW_MUTED : 'var(--color-muted)';
+  const textColor = glow ? GLOW_TEXT : 'var(--color-text)';
+  const shadow = glow ? GLOW_TEXT_SHADOW : 'none';
+
   return (
     <div className="space-y-3">
       {/* Current Prayer Card */}
       {display.showCurrentPrayer && currentPrayer && currentPrayer !== 'sunrise' && (
         <div
-          className={`bg-[var(--color-card)] rounded-lg p-3 border relative z-[45] ${
-            isUrgent ? 'border-red-500/50 current-prayer-glow' : 'border-[var(--color-border)]'
+          className={`${cardClass} relative z-[45] ${
+            !glow && isUrgent ? 'border-red-500/50 current-prayer-glow' : !glow ? 'border-[var(--color-border)]' : ''
           }`}
-          style={isUrgent ? { borderWidth: `${borderWidth}px` } : undefined}
+          style={!glow && isUrgent ? { borderWidth: `${borderWidth}px` } : undefined}
         >
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs text-[var(--color-muted)] uppercase tracking-wide mb-0.5">
+              <p className="text-xs uppercase tracking-wide mb-0.5" style={{ color: labelColor, textShadow: shadow }}>
                 Current Prayer
               </p>
-              <p className="text-lg font-semibold text-[var(--color-text)]">
+              <p className="text-lg font-semibold" style={{ color: textColor, textShadow: shadow }}>
                 {currentLabel}
               </p>
             </div>
             {currentPrayerTime ? (
               <div className="flex items-baseline gap-0.5">
-                <span className="text-2xl font-bold text-[var(--color-text)] tabular-nums">
+                <span className="text-2xl font-bold tabular-nums" style={{ color: glow && isUrgent ? GLOW_URGENT : textColor, textShadow: shadow }}>
                   {formatNumber(elapsed.h)}
                 </span>
-                <span className="text-lg text-[var(--color-muted)]">:</span>
-                <span className="text-2xl font-bold text-[var(--color-text)] tabular-nums">
+                <span className="text-lg" style={{ color: labelColor, textShadow: shadow }}>:</span>
+                <span className="text-2xl font-bold tabular-nums" style={{ color: glow && isUrgent ? GLOW_URGENT : textColor, textShadow: shadow }}>
                   {formatNumber(elapsed.m)}
                 </span>
-                <span className="text-lg text-[var(--color-muted)]">:</span>
-                <span className="text-2xl font-bold text-[var(--color-muted)] tabular-nums">
+                <span className="text-lg" style={{ color: labelColor, textShadow: shadow }}>:</span>
+                <span className="text-2xl font-bold tabular-nums" style={{ color: labelColor, textShadow: shadow }}>
                   {formatNumber(elapsed.s)}
                 </span>
-                <span className="text-xs text-[var(--color-muted)] ml-1 self-center">ago</span>
+                <span className="text-xs ml-1 self-center" style={{ color: labelColor, textShadow: shadow }}>ago</span>
               </div>
             ) : (
               <span className="text-sm font-medium text-[var(--color-primary)]">Active</span>
@@ -152,49 +164,47 @@ export function CountdownTimer({ currentPrayer, currentPrayerTime, nextPrayer, n
 
       {/* Sunnah Prayers Card */}
       {display.showSunnahCard && regularPrayers.length > 0 && (
-        <div className="bg-[var(--color-card)] rounded-lg p-3 border border-[var(--color-border)]">
+        <div className={`${cardClass} ${glow ? '' : 'border-[var(--color-border)]'}`}>
           <div className="space-y-1.5">
             {regularPrayers.map((prayer, idx) => (
               <div key={idx} className="flex items-center justify-between">
-                <span className={`text-sm ${
-                  prayer.type === 'fard' ? 'font-semibold text-[var(--color-text)]' : 'text-[var(--color-muted)]'
-                }`}>
+                <span className={`text-sm ${prayer.type === 'fard' ? 'font-semibold' : ''}`} style={{ color: prayer.type === 'fard' ? textColor : labelColor, textShadow: shadow }}>
                   {prayer.name}
                 </span>
                 {prayer.detail && (
-                  <span className="text-xs text-[var(--color-muted)]">{prayer.detail}</span>
+                  <span className="text-xs" style={{ color: labelColor, textShadow: shadow }}>{prayer.detail}</span>
                 )}
               </div>
             ))}
           </div>
           {sunnahInfo?.notes && (
-            <p className="text-xs text-[var(--color-muted)] mt-2 italic">{sunnahInfo.notes}</p>
+            <p className="text-xs mt-2 italic" style={{ color: labelColor, textShadow: shadow }}>{sunnahInfo.notes}</p>
           )}
         </div>
       )}
 
       {/* Next Prayer Countdown Card */}
       {display.showNextPrayer && nextPrayer && (
-        <div className="bg-[var(--color-card)] rounded-lg p-3 border border-[var(--color-border)]">
+        <div className={`${cardClass} ${glow ? '' : 'border-[var(--color-border)]'}`}>
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs text-[var(--color-muted)] uppercase tracking-wide mb-0.5">
+              <p className="text-xs uppercase tracking-wide mb-0.5" style={{ color: labelColor, textShadow: shadow }}>
                 Next Prayer
               </p>
-              <p className="text-lg font-semibold text-[var(--color-text)]">
+              <p className="text-lg font-semibold" style={{ color: textColor, textShadow: shadow }}>
                 {nextLabel}
               </p>
             </div>
             <div className="flex items-baseline gap-0.5">
-              <span className="text-2xl font-bold text-[var(--color-text)] tabular-nums">
+              <span className="text-2xl font-bold tabular-nums" style={{ color: textColor, textShadow: shadow }}>
                 {formatNumber(hours)}
               </span>
-              <span className="text-lg text-[var(--color-muted)]">:</span>
-              <span className="text-2xl font-bold text-[var(--color-text)] tabular-nums">
+              <span className="text-lg" style={{ color: labelColor, textShadow: shadow }}>:</span>
+              <span className="text-2xl font-bold tabular-nums" style={{ color: textColor, textShadow: shadow }}>
                 {formatNumber(minutes)}
               </span>
-              <span className="text-lg text-[var(--color-muted)]">:</span>
-              <span className="text-2xl font-bold text-[var(--color-primary)] tabular-nums">
+              <span className="text-lg" style={{ color: labelColor, textShadow: shadow }}>:</span>
+              <span className="text-2xl font-bold tabular-nums text-[var(--color-primary)]" style={{ textShadow: shadow }}>
                 {formatNumber(seconds)}
               </span>
             </div>
@@ -204,15 +214,15 @@ export function CountdownTimer({ currentPrayer, currentPrayerTime, nextPrayer, n
 
       {/* Ishraq/Duha Card */}
       {display.showSunnahCard && naflPrayer && (
-        <div className="bg-[var(--color-card)] rounded-lg p-3 border border-[var(--color-border)]">
-          <p className="text-xs text-[var(--color-muted)] uppercase tracking-wide mb-2">
+        <div className={`${cardClass} ${glow ? '' : 'border-[var(--color-border)]'}`}>
+          <p className="text-xs uppercase tracking-wide mb-2" style={{ color: labelColor, textShadow: shadow }}>
             Optional Prayer
           </p>
           <div className="flex items-center justify-between">
-            <p className="text-lg font-semibold text-[var(--color-text)]">
+            <p className="text-lg font-semibold" style={{ color: textColor, textShadow: shadow }}>
               {naflPrayer.name}
             </p>
-            <p className="text-sm text-[var(--color-muted)]">
+            <p className="text-sm" style={{ color: labelColor, textShadow: shadow }}>
               {naflPrayer.detail}
             </p>
           </div>
@@ -221,8 +231,8 @@ export function CountdownTimer({ currentPrayer, currentPrayerTime, nextPrayer, n
 
       {/* If no next prayer and no prayable prayers, show current time label */}
       {!nextPrayer && prayablePrayers.length === 0 && currentPrayer && (
-        <div className="bg-[var(--color-card)] rounded-lg p-3 border border-[var(--color-border)] text-center">
-          <p className="text-sm text-[var(--color-muted)]">
+        <div className={`${cardClass} ${glow ? '' : 'border-[var(--color-border)]'} text-center`}>
+          <p className="text-sm" style={{ color: labelColor, textShadow: shadow }}>
             {currentLabel} time
           </p>
         </div>
