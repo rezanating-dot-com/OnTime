@@ -1,6 +1,7 @@
 import Globe from 'globe.gl';
 import type { GlobeInstance } from 'globe.gl';
 import * as THREE from 'three';
+import { baseTexture, tileEnableAltitude } from './earthBaseTexture';
 import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
@@ -64,9 +65,33 @@ const MAX_DISTANCE = 3500;
 const CAMERA_NEAR = 1;
 const CAMERA_FAR = 9000;
 
-// NASA Blue Marble (public domain), bundled so the globe always has a complete
-// earth under the streamed tiles — including on a cold start and offline.
-const BASE_EARTH_TEXTURE_URL = '/earth-base.jpg';
+// NASA Blue Marble (public domain), bundled so the globe has a complete, sharp
+// earth with no network at all — this is the surface the user normally sees,
+// not a placeholder under the tiles. Which of the two sizes gets loaded, and
+// why there are two, is earthBaseTexture.ts.
+//
+// Source for both: NASA Visible Earth record 57752,
+// `land_shallow_topo_8192.tif`, JPEG q90. Any *larger* Blue Marble is a
+// different composite — the monthly Next Generation sets carry winter snow and
+// sea-floor bathymetry — so swapping one in changes how the globe looks, not
+// just how sharp it is.
+const BASE_EARTH_TEXTURE_URL = baseTexture().url;
+// Altitude (in globe radii) below which the Esri stream is worth switching on.
+//
+// It follows the texture: Esri only carries more detail than the bundled photo
+// one slippy level above the photo's own, which is what tileEnableAltitude()
+// works out. At the home framing the engine would pick level 2 — 1024px, an
+// eighth of the 8192 photo — and that download ending in a *coarser* surface
+// than the one it covered was the globe visibly softening a second after every
+// launch. Gating on it means the default view, the "My location" fly-in and
+// everything above the threshold come out of the package with no network at
+// all, and Esri is reached for only past the point where we ship nothing
+// sharper.
+//
+// Two values, not one, so a pinch that hovers on the boundary cannot flip the
+// engine on and off frame after frame.
+const TILE_ENABLE_ALTITUDE = tileEnableAltitude(baseTexture().width);
+const TILE_DISABLE_ALTITUDE = TILE_ENABLE_ALTITUDE * 1.2;
 // See prepareBaseMaterial(): the base sphere sits just inside the tile shell.
 const BASE_SPHERE_SCALE = 0.998;
 // How many frames ensureBaseSetup() will wait for globe.gl's deferred init.
@@ -83,6 +108,17 @@ const TILE_ENABLE_FALLBACK_MS = 2500;
 // Esri World Imagery. Also matched against loading-manager URLs to tell a
 // surface tile apart from the app's own textures.
 const TILE_HOST = 'server.arcgisonline.com';
+type TileUrlFn = (x: number, y: number, level: number) => string;
+const tileUrl: TileUrlFn = (x, y, l) =>
+  `https://${TILE_HOST}/ArcGIS/rest/services/World_Imagery/MapServer/tile/${l}/${y}/${x}`;
+/**
+ * Switching the engine off. three-globe reads this prop as a truthiness test
+ * (`tileEngine.visible = !!url`, run on every update) and the slippy engine's
+ * own updatePov() returns early without a URL, so null is how the surface is
+ * handed back to the base sphere. Only the .d.ts disagrees — it admits the
+ * URL function alone — hence the cast rather than a wider local type.
+ */
+const TILE_ENGINE_OFF = null as unknown as TileUrlFn;
 
 /**
  * three-slippy-map-globe loads its surface tiles through a bare TextureLoader,
@@ -177,6 +213,8 @@ const SUN_LINE_ALTITUDE = 0.006;
 const GROUND_ALTITUDE = 0.002;
 const GROUND_LINE_ALTITUDE = 0.0015;
 const GROUND_LINE_WIDTH_PX = 6;
+/** Just past the 700ms exit fly-out, so the tile gate re-reads a settled camera. */
+const GROUND_EXIT_SETTLE_MS = 750;
 /** The 3D Kaaba endpoint, raised and scaled so it reads as a landmark. */
 const KAABA_ALTITUDE = 0.05;
 const KAABA_SCALE = 2.2;
@@ -509,7 +547,7 @@ export class HomeGlobe {
       if (typeof url === 'string' && url.includes(TILE_HOST)) this.sawTileTexture = true;
     },
     onAllLoaded: () => {
-      this.enableTilesOnceBaseIsUp();
+      this.syncTileEngine();
       // Hold the loader until surface tiles have actually landed, not merely
       // until the base texture is on: enabling the tile engine is what starts
       // the tile fetch, so revealing there uncovers a globe that then visibly
@@ -547,16 +585,21 @@ export class HomeGlobe {
       // without a base texture every un-loaded tile reads as a black hole while
       // the mosaic streams in. Bundled (and preloaded from index.html) so it is
       // decoded before the globe mounts and still works offline. The tile
-      // engine itself is switched on in
-      // enableTilesOnceBaseIsUp(): started together, the tile flood (hundreds
-      // of decodes + GPU uploads) lands ahead of the base and the globe sits
-      // black for the first half second of every cold start.
+      // engine is switched on separately, in syncTileEngine(): started
+      // together, the tile flood (hundreds of decodes + GPU uploads) lands
+      // ahead of the base and the globe sits black for the first half second
+      // of every cold start.
       .globeImageUrl(BASE_EARTH_TEXTURE_URL)
       .showAtmosphere(true)
       .atmosphereColor('#4d7fbf')
       .atmosphereAltitude(0.12);
-    // Safety net: never leave the surface tile-less if the base somehow fails.
-    setTimeout(() => this.enableTiles(), TILE_ENABLE_FALLBACK_MS);
+    // Safety net for the one case that leaves the globe with no surface at
+    // all: the bundled texture failing to decode. A working base is the
+    // surface now, so this must not fire merely because tiles are gated off.
+    setTimeout(() => {
+      const mat = this.globe?.globeMaterial() as THREE.MeshPhongMaterial | undefined;
+      if (!mat?.map) this.enableTiles();
+    }, TILE_ENABLE_FALLBACK_MS);
 
     const controls = this.globe.controls();
     controls.autoRotate = false;
@@ -575,11 +618,12 @@ export class HomeGlobe {
       if (this.disposed) return;
       this.ready = true;
       this.ensureBaseSetup();
-      this.enableTilesOnceBaseIsUp();
       this.buildExtras();
       // Aim the camera before the first paint so the surface tiles load
-      // around the user rather than the globe's default (0,0) point.
+      // around the user rather than the globe's default (0,0) point — and
+      // before the tile gate below, which reads the resulting altitude.
       this.globe.pointOfView({ lat: this.data.latitude, lng: this.data.longitude, altitude: HOME_ALTITUDE }, 0);
+      this.syncTileEngine();
       this.applyKey = this.computeApplyKey(this.data);
       this.applyData();
       this.updateZoomFades();
@@ -592,6 +636,9 @@ export class HomeGlobe {
 
     this.globe.onZoom(() => {
       this.updateZoomFades();
+      // The camera-changed hook is also where the tile gate is re-tested: a
+      // pinch past TILE_ENABLE_ALTITUDE is the only thing that starts a fetch.
+      this.syncTileEngine();
     });
 
     this.ro = new ResizeObserver(() => this.resize());
@@ -776,13 +823,46 @@ export class HomeGlobe {
     });
   }
 
-  /** Start streaming surface tiles, but only after the base earth texture is
-   *  on the material — see the globeImageUrl note in mount(). */
-  private enableTilesOnceBaseIsUp(): void {
-    if (this.tilesEnabled || this.disposed) return;
-    const mat = this.globe?.globeMaterial() as THREE.MeshPhongMaterial | undefined;
+  /**
+   * Camera altitude in globe radii — the same quantity the tile engine derives
+   * its level from, so the gate and the engine agree on what "close" means.
+   *
+   * Ground view moves the camera by hand and leaves pointOfView() stale, but
+   * it is also the closest the camera ever gets, so answer for it directly.
+   */
+  private cameraAltitude(): number {
+    if (this.inGroundMode) return GROUND_ALTITUDE;
+    return this.globe?.pointOfView().altitude ?? HOME_ALTITUDE;
+  }
+
+  /**
+   * Match the Esri stream to where the camera is: on when it is close enough
+   * for tiles to beat the bundled photo, off when it is not.
+   *
+   * Off rather than merely ignored, and in both directions — a one-way gate
+   * would leave the very first pinch-in switching the stream on for the rest
+   * of the session, so every later return to the home view would go back to
+   * the coarse level-2 mosaic and the globe would be soft again.
+   *
+   * Only ever runs once the base texture is on the material: without one the
+   * tiles are the only surface there is (see the safety net in mount()), and
+   * switching them off would leave the globe blank.
+   */
+  private syncTileEngine(): void {
+    if (this.disposed || !this.globe) return;
+    const mat = this.globe.globeMaterial() as THREE.MeshPhongMaterial | undefined;
     if (!mat?.map) return;
-    this.enableTiles();
+    const altitude = this.cameraAltitude();
+    if (!this.tilesEnabled && altitude < TILE_ENABLE_ALTITUDE) {
+      this.enableTiles();
+    } else if (this.tilesEnabled && altitude > TILE_DISABLE_ALTITUDE) {
+      this.disableTiles();
+    } else if (!this.tilesEnabled) {
+      // The bundled photo *is* the finished surface at this framing, so there
+      // is nothing left to wait for. Release the loader here rather than
+      // holding the globe hidden for tiles that will never be requested.
+      this.fireSurfaceReady();
+    }
   }
 
   private enableTiles(): void {
@@ -793,9 +873,24 @@ export class HomeGlobe {
     // (see the loading-manager hook in mount()). This caps the wait, for a
     // slow network or a cold start with nothing cached and no connection.
     setTimeout(() => this.fireSurfaceReady(), FIRST_TILES_MAX_WAIT_MS);
-    this.globe.globeTileEngineUrl(
-      (x, y, l) => `https://${TILE_HOST}/ArcGIS/rest/services/World_Imagery/MapServer/tile/${l}/${y}/${x}`
-    );
+    this.globe.globeTileEngineUrl(tileUrl);
+  }
+
+  /**
+   * Hand the engine a null URL. globe.gl hides the whole tile group on that,
+   * which uncovers the base sphere, and the engine's own updatePov() returns
+   * early without a URL — so nothing is drawn over the photo and nothing is
+   * requested while the camera is out here.
+   *
+   * The tile meshes are left allocated rather than cleared: they cost GPU
+   * memory the retention patch already budgets for, and keeping them makes
+   * the next pinch back in instant and free of network.
+   */
+  private disableTiles(): void {
+    if (!this.tilesEnabled || this.disposed || !this.globe) return;
+    this.tilesEnabled = false;
+    this.globe.globeTileEngineUrl(TILE_ENGINE_OFF);
+    this.renderThenSettle();
   }
 
   /** Draw the change that was just applied, then let the loop idle again. */
@@ -934,6 +1029,10 @@ export class HomeGlobe {
       to: target,
     };
     this.wake();
+    // Ground view is the closest the camera ever gets, and it moves by hand
+    // with OrbitControls disabled — so onZoom cannot be relied on to notice.
+    // Switch the stream on here, so the imagery is real at eye level.
+    this.syncTileEngine();
     this.animateGroundFly();
   }
 
@@ -958,6 +1057,13 @@ export class HomeGlobe {
     this.globe.pointOfView({ lat: this.data.latitude, lng: this.data.longitude, altitude: HOME_ALTITUDE }, 700);
     this.wake();
     this.scheduleIdlePause(2200);
+    // Hand the surface back to the bundled photo once the fly-out has actually
+    // landed at HOME_ALTITUDE. Doing it now would pull the tiles out from under
+    // a camera still at ground level; leaving it to onZoom would depend on the
+    // animation dispatching one, which is the thing ground mode cannot assume.
+    setTimeout(() => {
+      if (!this.inGroundMode) this.syncTileEngine();
+    }, GROUND_EXIT_SETTLE_MS);
   }
 
   private animateGroundFly(): void {

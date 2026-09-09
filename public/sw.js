@@ -21,10 +21,15 @@ const CACHE_NAME = 'ontime-tiles-v2';
 const STATIC_HOSTS = ['server.arcgisonline.com'];
 
 /**
- * How many tiles to keep. At roughly 15 KB each this is about 9 MB — enough for
- * the ~16 tiles a cold start needs plus a good deal of zooming and panning,
- * while still bounding a cache that previously grew without limit for the life
- * of the install.
+ * How many tiles to keep. At roughly 15 KB each this is about 9 MB, bounding a
+ * cache that previously grew without limit for the life of the install.
+ *
+ * A cold start needs none of it any more: homeGlobe.ts only switches the tile
+ * engine on once the camera drops below the altitude at which Esri finally
+ * beats the bundled Blue Marble (0.25 with the 8192 photo, 0.5 with the 4096
+ * one — see earthBaseTexture.ts), and the default framing is well above both.
+ * So this cache now covers zooming and panning at close range, and nothing
+ * else.
  */
 const MAX_CACHED_TILES = 600;
 
