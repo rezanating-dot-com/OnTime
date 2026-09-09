@@ -35,7 +35,7 @@ export interface HomeGlobeData {
 }
 
 // All distances are in globe-radius units (globe.gl uses a 100-unit globe).
-const GLOBE_RADIUS = 100;
+export const GLOBE_RADIUS = 100;
 const HOME_ALTITUDE = 2.5; // default framing
 const FOCUS_ALTITUDE = 0.5; // "My location" fly-in
 const MIN_ALTITUDE = 0.06; // pinch floor, just above the atmosphere
@@ -167,7 +167,6 @@ const TAP_TIME_THRESHOLD_MS = 400;
 const STAR_COUNT = 1400;
 const STAR_RADIUS = 4000;
 
-const PIN_ALTITUDE = 0.035;
 const PIN_SIZE_PX = 50; // on-screen diameter of the location marker
 const PIN_COLOR = '#4285F4';
 
@@ -215,7 +214,7 @@ const v3 = (p: Vec3 | { x: number; y: number; z: number }) =>
   new THREE.Vector3(p.x, p.y, p.z);
 
 /** three-globe's lat/lng → cartesian convention (lon 0 on +z). */
-function geo2xyz(lat: number, lon: number, r: number): { x: number; y: number; z: number } {
+export function geo2xyz(lat: number, lon: number, r: number): { x: number; y: number; z: number } {
   const phi = (90 - lat) * D2R;
   const theta = (90 - lon) * D2R;
   const s = Math.sin(phi);
@@ -1324,8 +1323,13 @@ export class HomeGlobe {
     );
 
     // Location marker
+    // depthTest off so the marker can sit exactly on the surface without the
+    // sphere slicing the half of the sprite that falls behind it; the globe is
+    // put back in front of it by hand in updatePinVisibility().
     this.pin = new THREE.Sprite(
-      new THREE.SpriteMaterial({ map: locationMarkerTexture(), transparent: true, depthWrite: false })
+      new THREE.SpriteMaterial({
+        map: locationMarkerTexture(), transparent: true, depthWrite: false, depthTest: false,
+      })
     );
     this.pin.renderOrder = 3;
     scene.add(this.pin);
@@ -1547,22 +1551,61 @@ export class HomeGlobe {
     }
   }
 
+  /**
+   * Exactly on the surface, at altitude 0.
+   *
+   * The marker used to be lifted 0.035 globe-radii along the surface normal, to
+   * keep it clear of the sphere for the depth test. But a point off the surface
+   * only projects to the same pixel as the ground beneath it when it lies on
+   * the camera axis; everywhere else the lift is parallax, pushing the marker
+   * outward from the centre of the disc and growing toward the limb. Measured
+   * on device at the "My location" framing: over one drag the marker travelled
+   * 410.9px while the terrain under it travelled 368px — 42.9px adrift, only
+   * 3.3 degrees off the screen centre.
+   *
+   * A sprite centred on the surface is half inside the sphere at any oblique
+   * angle, so this only works because the marker skips the depth test (see the
+   * SpriteMaterial in buildExtras) and is culled against the horizon by hand in
+   * updatePinVisibility — the same trade updateLabelAnchors already makes for
+   * the prayer labels, and for the same reason.
+   */
   private updatePin(): void {
-    const p = this.globe.getCoords(this.data.latitude, this.data.longitude, PIN_ALTITUDE);
+    const p = this.globe.getCoords(this.data.latitude, this.data.longitude, 0);
     this.pin.position.copy(v3(p));
+  }
+
+  /**
+   * Hide the marker once its point on the sphere has rotated past the horizon.
+   *
+   * With the depth test off, nothing else does: the far side of the globe would
+   * otherwise show its own marker straight through the earth. This is the test
+   * updateLabelAnchors uses — a point on a sphere of radius R is over the
+   * horizon when the cosine of its angle from the camera direction drops below
+   * R / camera distance.
+   */
+  private updatePinVisibility(cam: THREE.PerspectiveCamera): void {
+    const camDist = cam.position.length();
+    const horizonCos = camDist > GLOBE_RADIUS ? GLOBE_RADIUS / camDist : 0;
+    const facing = this.pin.position.dot(cam.position) / (GLOBE_RADIUS * camDist);
+    this.pin.visible = facing > horizonCos;
   }
 
   private updateZoomFades(): void {
     // In ground view the pointOfView() altitude is stale (the camera is moved
     // manually) and the pin/labels are hidden anyway — skip the fade logic.
     if (this.inGroundMode) return;
-    const altitude = this.globe?.pointOfView().altitude ?? HOME_ALTITUDE;
-    // Keep the marker a constant size on screen at every zoom level.
+    // Keep the marker a constant size on screen at every zoom level. Sprites
+    // scale with distance, so the world size is chosen to cancel it out —
+    // measured to the marker itself rather than to the point under the camera,
+    // which are the same only at the centre of the disc. Against the
+    // sub-camera distance the marker visibly shrinks as it slides toward the
+    // screen edge, which reads as a drift of its own.
     const cam = this.globe.camera() as THREE.PerspectiveCamera;
     const canvasH = (this.host.clientHeight || 1) * Math.min(window.devicePixelRatio || 1, 2);
-    const dist = Math.max(1, (altitude - PIN_ALTITUDE) * GLOBE_RADIUS);
+    const dist = Math.max(1, cam.position.distanceTo(this.pin.position));
     const worldSize = (PIN_SIZE_PX * 2 * Math.tan((cam.fov * D2R) / 2) * dist) / canvasH;
     this.pin.scale.setScalar(worldSize);
+    this.updatePinVisibility(cam);
     // This is the camera-changed hook, so it is also where labels re-anchor.
     this.updateLabelAnchors();
   }
