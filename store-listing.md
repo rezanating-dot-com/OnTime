@@ -1,35 +1,74 @@
 # Google Play Store Listing
 
+*Last updated: 2026-09-10. Update this alongside `PRIVACY_POLICY.md` — the
+privacy paragraph below is a summary of that file and the two must not drift.*
+
 ## Short Description (80 chars max)
-Accurate prayer times with tracking, Qibla compass, travel mode & notifications
+
+Prayer times, Qibla, tracking and travel mode. Works offline. No ads, no accounts.
 
 ## Full Description
 
-OnTime gives you accurate Islamic prayer times based on your location with a clean, distraction-free interface.
+OnTime gives you accurate Islamic prayer times for wherever you are, in an app
+that stays out of your way.
+
+Everything is calculated on your phone. No account, no ads, no tracking, and
+nothing to sign up for.
 
 FEATURES
 
-- Accurate prayer times calculated locally using trusted methods (ISNA, MWL, Umm Al-Qura, Egyptian, and more)
-- Prayer tracking — mark prayers as prayed on time or missed and view your streaks
-- Countdown timers for current and next prayer
-- Qibla compass to find the direction of the Kaaba from anywhere
-- Travel mode — automatically detects when you're traveling (88.7+ km from home) and shows shortened Qasr prayers and Jama' combinations
-- Jumuah support with custom khutbah times
-- Sunnah/Rawatib prayer reminders for each fard prayer
-- Notifications with customizable reminders before each prayer
-- Dark mode with automatic switching at Maghrib/Fajr
-- Multiple calculation methods: ISNA, Muslim World League, Egyptian, Umm Al-Qura, Dubai, Karachi, Kuwait, Qatar, Singapore, Tehran, Turkey, Moonsighting Committee
-- Hanafi and Shafi Asr calculation support
-- Optional sunrise, middle of night, and last third of night times
-- Works offline — all calculations happen on your device
-- No ads, no tracking, no accounts required
+- Accurate prayer times, calculated on your device, using the method you trust — ISNA, Muslim World League, Umm Al-Qura, Egyptian, Dubai, Karachi, Kuwait, Qatar, Singapore, Tehran, Turkey, or Moonsighting Committee
+- Hanafi and Shafi'i Asr calculation
+- A living globe for your home screen: real satellite imagery, the day and night sides of the Earth, and a line drawn across the world for each prayer, so you can see where in the world it is Fajr right now
+- Or a plain list, if that is what you want. Both light and dark, plus Desert, Rose, Forest and Ocean, and an Auto mode that turns dark at Maghrib
+- Qibla compass with a great-circle bearing to the Kaaba from anywhere
+- Prayer tracking — mark each prayer on time or missed, and see your week
+- Countdown to the current and next prayer
+- Notifications before each prayer, with a real athan if you want one
+- Travel mode — noticed automatically when you are far from home, with shortened Qasr prayers and Jama' combinations
+- Jumu'ah support with your own khutbah time
+- Sunnah and Rawatib reminders for each fard prayer
+- Optional sunrise, middle of the night, and last third of the night
+- A second visual design, drawn around Islamic geometry
+- Works with no signal — every calculation is local
 
 PRIVACY
 
-OnTime is built with your privacy in mind. All prayer calculations happen locally on your device. The only network request is to display your city name using OpenStreetMap. No personal data is collected or shared.
+OnTime has no account, no analytics, no advertising, and no third-party
+tracking. Prayer times, Qibla bearings and sun positions are all worked out on
+your device.
+
+Four things do reach the internet, and none of them is about you:
+
+- your coordinates go to OpenStreetMap to turn them into a city name
+- the map preview, when you open it, is loaded from OpenStreetMap
+- the globe's satellite imagery is streamed from Esri, which means those requests show roughly which part of the world you are looking at
+- athan recordings are downloaded from Assabile, only when you choose one
+
+Full detail, including how to avoid each one, is in the privacy policy.
 
 ## Category
+
 Lifestyle
 
 ## Tags
-prayer times, salah, islamic, muslim, qibla, adhan, prayer tracker, quran, ramadan, mosque
+
+prayer times, salah, islamic, muslim, qibla, adhan, prayer tracker, ramadan, athan, namaz
+
+## Assets
+
+- **Phone screenshots** — `docs/store/2026-09-10/`, six at 1080×1920. Regenerate with `scripts/store-screenshots.mjs`.
+- **Feature graphic** — 1024×500. **Not done.** Has to be designed; it cannot be screenshotted.
+- **Tablet screenshots** — only needed if the listing claims tablet support.
+
+## Before submitting
+
+- **Data safety form.** Declare location as collected and shared, used for app
+  functionality, not linked to an identity, and not used for tracking. The
+  sharing answer is yes because coordinates reach OpenStreetMap — answering no
+  is the common mistake here.
+- **Permission declarations.** `SCHEDULE_EXACT_ALARM` and
+  `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` both need a justification in the
+  console.
+- **Privacy policy URL** must point at the current `PRIVACY_POLICY.md`, not a
+  cached copy.
