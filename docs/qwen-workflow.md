@@ -96,9 +96,10 @@ Three things learned setting it up, all of them the kind that waste an hour:
 - **Same rule as qwen, harder.** DeepSeek is an advisor, never the author or
   the reviewer of record. The logicly pilot measured v4-pro; `flash` is the
   cheaper, weaker model, so verify every finding against the real code
-  before acting. Across five reviews it landed 8 of 27 findings as
-  actionable, with the rest split between dead code, deliberate trade-offs,
-  and three outright wrong claims.
+  before acting. Across six reviews it landed 8 fixed and 1 still
+  open out of 29 findings, with the rest split between dead code, deliberate
+  trade-offs, and three outright wrong claims. It is markedly better on a
+  branch diff than on a cold read: 2 of 2 on the one diff it was given.
 
 Retro on request ("how's DeepSeek doing"): analyse
 `docs/ds-review-log.jsonl` for unique catches, false-positive rate and cost.

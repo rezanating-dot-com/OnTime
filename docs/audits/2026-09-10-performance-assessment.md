@@ -32,6 +32,15 @@ Two consequences, both important before quoting any number in this file:
   three.js frame costs are reported only as "there is something here", never as
   a magnitude.
 
+**Every figure here is a single run.** No repeats, no medians. Treat a
+difference under about 15% as noise — one of the "before" runs in the table
+below came back at 1511ms where its neighbours were ~820ms. The differences
+quoted as wins are the ones large enough and repeatable enough in shape to
+survive that. The reopen figures additionally assume the qibla overlay actually
+closed between passes, which the harness did not assert; that it did is
+inferred from the saving matching the coastline work's measured cost on both
+home views.
+
 Long tasks (>50ms of uninterrupted main-thread work) are the unit throughout,
 because on this app they are what a user feels: the globe not appearing, the
 qibla screen arriving late, the tap that does not respond.
@@ -179,6 +188,24 @@ Reachable, though, and now covered by a test that steps the clock backwards.
   calculation, and a week of notification scheduling makes fifteen of those.
 - Two render loops allocated vectors per frame, and a shared base-class helper
   allocated two per call — which is per marker per frame in any view using it.
+
+### P2 — Isha's label floats with no line under it on interval methods — **open**
+
+Not on this branch. On `fix/solar-ring-half-arcs`, which was checked out when
+this session began. That branch halved each solar ring so a prayer's line is
+only drawn over the longitudes at that prayer's time of day — correct — but
+Isha's label still anchors to the eastern half of the Fajr ring, which is now
+the half that is no longer drawn. Umm al-Qura and Qatar set Isha at Maghrib
+plus a fixed interval with no solar angle, so those users get a floating "Isha"
+pill over the globe with nothing beneath it.
+
+The label is on the right half of the sky; only its line is missing. The right
+anchor is the terminator's evening side with the usual stagger, because for an
+interval method Isha genuinely *is* Maghrib plus N minutes. Left for the owner:
+it is a different branch and label placement is a visual call.
+
+Found by DeepSeek, which got the mechanism right and the consequence wrong — it
+claimed the label lands on the morning side, which it does not.
 
 ### P3 — 5MB of dead assets in the Android build directory
 
