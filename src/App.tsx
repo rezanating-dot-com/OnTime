@@ -20,8 +20,7 @@ import { HomeGlobeScreen } from './components/HomeGlobeScreen';
 import { OnboardingScreen } from './components/OnboardingScreen';
 import { TravelPromptDialog } from './components/TravelPromptDialog';
 import { NotificationPermissionDialog } from './components/NotificationPermissionDialog';
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faKaaba } from '@fortawesome/free-solid-svg-icons';
+import { KaabaIcon } from './components/KaabaIcon';
 
 const QiblaCompass = lazy(() => import('./components/QiblaCompass').then(m => ({ default: m.QiblaCompass })));
 const SettingsModal = lazy(() => import('./components/SettingsModal').then(m => ({ default: m.SettingsModal })));
@@ -221,11 +220,7 @@ function App() {
                 }}
                 aria-label="Open qibla compass"
               >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                  <rect x="4" y="7" width="16" height="13" stroke="var(--color-primary)" strokeWidth="1.5"/>
-                  <rect x="4" y="10" width="16" height="2" fill="var(--color-primary)" opacity="0.4"/>
-                  <path d="M8 7V5h8v2" stroke="var(--color-primary)" strokeWidth="1.5"/>
-                </svg>
+                <KaabaIcon className="w-5 h-5 text-[var(--color-primary)]" />
               </button>
               <button
                 onClick={() => updateHomeView(isGlobeHome ? 'list' : 'globe')}
@@ -287,7 +282,7 @@ function App() {
                 className="p-2 rounded-full hover:bg-[var(--color-card)] transition-colors"
                 aria-label="Open qibla compass"
               >
-                <FontAwesomeIcon icon={faKaaba} className="w-5 h-5 text-[var(--color-muted)]" />
+                <KaabaIcon className="w-5 h-5 text-[var(--color-muted)]" />
               </button>
               <button
                 onClick={() => updateHomeView(isGlobeHome ? 'list' : 'globe')}
