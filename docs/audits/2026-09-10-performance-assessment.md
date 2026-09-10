@@ -13,8 +13,13 @@ review model's own record.
 
 ## 1. How this was measured, and what the numbers are not
 
-No device was attached (`adb devices` empty), so **nothing here is a
-device measurement**. Everything below comes from headless Chrome driven over
+> **Superseded in part.** A device became available later the same day and §8
+> reports what it said. Two conclusions below did not survive it: that the
+> globe home screen is where the app's startup cost lives, and that reopening
+> the qibla screen is now free. Read §8 before quoting anything in §1–§3.
+
+No device was attached when §1–§7 were written (`adb devices` empty), so
+**nothing in them is a device measurement**. Everything below comes from headless Chrome driven over
 CDP against `vite preview` of a production build, in a 412×915 viewport at
 DPR 2.625, with `Emulation.setCPUThrottlingRate: 4`.
 
@@ -324,3 +329,115 @@ Specifically worth checking on device:
 4. Whether the 240ms coastline walk is closer to 60ms or 300ms on real
    hardware, which decides whether the precomputed-path work in §5 is worth
    doing.
+
+---
+
+## 8. What the device said
+
+Measured the same evening on a **Pixel 10 Pro XL, Android 17**, over CDP on the
+debug WebView, using the same instrument as the headless harness: a `longtask`
+PerformanceObserver installed via `Page.addScriptToEvaluateOnNewDocument`
+before a reload. Two builds compared — current `main`, and `a17e466`, the
+commit this assessment started from.
+
+Everything below is on one fast phone. A budget device is several times slower,
+and the ratios matter more than the absolute numbers.
+
+### The headless harness was wrong about where startup cost lives
+
+| Boot, blocked main thread | headless @4× | Pixel 10 Pro XL |
+|---|---|---|
+| List home | 0ms | **~270ms** (n=3, 248–303) |
+| Globe home | 1243ms in 12 tasks | **~246ms** (n=4, 229–256) |
+
+**The globe and the list cost the same on real hardware.** §1's headline — that
+every startup cost in this app belongs to the globe — is an artefact of
+SwiftShader, and it is wrong. The globe's extra second in headless was software
+rasterisation, exactly as §1's own caveat warned might be the case; the caveat
+was right and the conclusion drawn next to it was not.
+
+What the ~250ms actually is, from a CPU profile over the boot:
+
+```
+404.6ms  (program)              — script parse and compile, spread across the window
+ 39.6ms  (garbage collector)
+ 36.2ms  getShaderInfoLog       — WebGL shader compilation
+ 32.3ms  getProgramInfoLog      — WebGL program linking
+ 28.2ms  texSubImage2D          — first texture upload
+ 27.2ms  renderer setSize
+ 19.3ms  getContext             — creating the WebGL context
+```
+
+Most of it is script compile and WebGL setup. Both home views pay it, because
+both boot the same bundle and the list view still initialises Capacitor's
+native bridge.
+
+**Before and after on device:** globe boot ~273ms before (n=3) against ~246ms
+after (n=4). That is a real but small improvement, and it is inside the
+run-to-run spread. The startup work in §4 did not move this device measurably.
+
+### Reopening the qibla screen is not free, and the coastline was not the reason
+
+§2 said reopening no longer costs anything measurable. On device it does:
+
+| Qibla open | before (`a17e466`) | after (`main`) |
+|---|---|---|
+| First open | 463ms | ~430ms |
+| Reopen | 641ms, 666ms (n=2) | ~536ms (n=6, 377–595) |
+
+The baseline sample is two runs, which is too thin to size the difference
+honestly. What is clear is that **a reopen still costs about half a second**,
+with a single task of 320–360ms inside it. The coastline caching removed real
+work — the 240ms path build is gone, and that is not in doubt — but it was
+never the largest part of this on a device with a real GPU.
+
+A profile of a reopen puts the remaining cost in one place:
+
+```
+200.7ms  getProgramInfoLog      — linking a fresh set of WebGL programs
+ 40.5ms  getContext
+ 13.7ms  getShaderInfoLog
+```
+
+Closing the qibla overlay unmounts its globe, so opening it again creates a new
+WebGL context and recompiles and relinks every shader three.js needs. That is
+the cost. It is the same shape of problem the home globe already solved by
+staying mounted and parked under overlays (`globeCovered`), and the same fix
+would work — at the price of a second live WebGL context for the life of the
+app, which is a memory decision for the owner rather than a change to make
+quietly. **This is now the largest known win left in the app.**
+
+### The stale-assets story in `7bb9a34` was wrong about the cause
+
+That commit says the 5MB of earth imagery in the Android assets folder was
+"replaced some time ago by one smaller file". It was not. Those files are the
+*newer* 4K and 8K textures from the unmerged `fix/offline-globe-texture`
+branch, left behind by a branch switch on 2026-09-09.
+
+The mechanism the commit describes is exactly right and the fix is arguably
+more valuable than stated — switching branches is precisely how foreign assets
+get stranded in a folder that `cap sync` copies into rather than mirrors. Only
+the provenance was wrong.
+
+### What §7 asked, answered
+
+1. **Globe home cold start** — ~250ms of blocked main thread, the same as the
+   list view.
+2. **Is the globe's render-loop settling real?** No. It was SwiftShader.
+3. **Three WebGL contexts with qibla open over globe home** — real, and now
+   known to be expensive in a second way: the qibla one is rebuilt from scratch
+   every time. Graphics memory sits around 300MB PSS on `main`.
+4. **Is the coastline work worth having done?** Yes, but for less than §2
+   claimed. It is 240ms at 4× throttle and a smaller share of a real device's
+   half-second reopen.
+
+### Still open
+
+- The qibla overlay's WebGL context rebuild, above.
+- `fix/offline-globe-texture` (#21) is held rather than merged: it takes globe
+  boot from 245ms to 646ms on this device, all of it one 412ms `texSubImage2D`
+  of an 8192×4096 texture, and 300MB of graphics memory to 435MB. It does take
+  external requests on that screen from 16 to zero. Measurements and three ways
+  out are on the PR.
+- None of this has been checked on a slow device, which is where all of it
+  matters most.
