@@ -147,6 +147,7 @@ export interface DisplaySettings {
   showCurrentPrayer: boolean;
   showNextPrayer: boolean;
   showSunnahCard: boolean;
+  hijriOffset: -2 | -1 | 0 | 1 | 2;
 }
 
 export interface SavedLocation {
