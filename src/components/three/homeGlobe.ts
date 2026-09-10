@@ -24,6 +24,8 @@ export interface HomeGlobeData {
   fajrTwilightDeg: number;
   /** Isha twilight angle, or null for interval-based methods (Umm al-Qura, Qatar). */
   ishaTwilightDeg: number | null;
+  /** Minutes after Maghrib that Isha falls, for those interval-based methods. */
+  ishaIntervalMin?: number | null;
   /** Asr shadow factor: 1 for the standard (Shafi'i) rule, 2 for Hanafi. */
   asrShadowFactor: number;
   /** Ground-view (qibla) mode: camera drops to the user and follows the compass. */
@@ -199,9 +201,14 @@ const SOLAR_LINE_WIDTH_PX = 5;
 
 // Shared with the globe HUD so the accent beside a prayer's name and its line
 // on the earth are the same colour.
-// One circle serves the sunrise/sunset pair — the terminator is both. Fajr and
-// Isha each get their own whenever the method gives them different angles, so
-// up to four circles are drawn plus the noon meridian for Dhuhr.
+// One full circle serves the sunrise/sunset pair — the terminator is both.
+// Every other ring is drawn as a half arc, morning or evening, because the
+// circle's other half is the same sun altitude at the mirrored time of day and
+// no prayer sits there: a whole Asr circle laid a green "Asr" line across
+// mid-morning. So Fajr takes the western half and Isha the eastern half of the
+// twilight ring — one circle's worth when the method gives them the same angle,
+// two when it does not — Asr the eastern half of its own, plus the noon
+// meridian for Dhuhr.
 const FAJR_COLOR = PRAYER_COLORS.fajr;
 const SUNRISE_COLOR = PRAYER_COLORS.sunrise;
 const NOON_COLOR = PRAYER_COLORS.dhuhr;
@@ -215,7 +222,7 @@ const v3 = (p: Vec3 | { x: number; y: number; z: number }) =>
   new THREE.Vector3(p.x, p.y, p.z);
 
 /** three-globe's lat/lng → cartesian convention (lon 0 on +z). */
-function geo2xyz(lat: number, lon: number, r: number): { x: number; y: number; z: number } {
+export function geo2xyz(lat: number, lon: number, r: number): { x: number; y: number; z: number } {
   const phi = (90 - lat) * D2R;
   const theta = (90 - lon) * D2R;
   const s = Math.sin(phi);
@@ -229,6 +236,23 @@ function geo2xyz(lat: number, lon: number, r: number): { x: number; y: number; z
  */
 function twilightRingDeg(degBelowHorizon: number): number {
   return 90 + degBelowHorizon;
+}
+
+/**
+ * Where an interval-based Isha falls on the globe.
+ *
+ * Umm al-Qura and Qatar put Isha at Maghrib plus a fixed number of minutes, so
+ * there is no sun altitude to build a ring from — no depression angle exists
+ * to be on. But the places where it is Isha right now are exactly the places
+ * where the sun set that many minutes ago, so the line is the terminator as it
+ * stood then: the same circle, drawn around where the sun was. The Earth turns
+ * 15 degrees an hour, so that is a quarter of a degree of sub-solar longitude
+ * per minute, eastward of where the sun is now.
+ *
+ * Returns the sub-solar longitude to draw that terminator around.
+ */
+export function intervalIshaSunLon(sunLon: number, intervalMinutes: number): number {
+  return sunLon + intervalMinutes / 4;
 }
 
 /**
@@ -256,17 +280,41 @@ function asrRingDeg(latitude: number, declination: number, shadowFactor: number)
  * Points along the circle where the sun sits at a given altitude: the angular
  * distance from the sub-solar point is `thetaDeg` (90° = horizon/terminator,
  * 90° + the twilight angle = fajr/isha, 90° − the Asr altitude = Asr).
+ *
+ * `side` picks a half. The sun passes every altitude twice a day — climbing in
+ * the morning, falling in the afternoon — so the full circle holds both
+ * moments: its western half is the morning one and its eastern half the
+ * afternoon one. Only the terminator has a prayer on each ('both'); every other
+ * ring must be halved, or it draws its prayer's line over longitudes that are
+ * at the mirrored time of day. See rebuildPrayerLines.
  */
-function sunAltitudeCircle(sunDir: THREE.Vector3, thetaDeg: number, radius: number, segments = 128): THREE.Vector3[] {
+export function sunAltitudeCircle(
+  sunDir: THREE.Vector3,
+  thetaDeg: number,
+  radius: number,
+  side: 'both' | 'east' | 'west' = 'both',
+  segments = 128
+): THREE.Vector3[] {
   const up = Math.abs(sunDir.y) < 0.9 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0);
   const u = new THREE.Vector3().crossVectors(sunDir, up).normalize();
   const v = new THREE.Vector3().crossVectors(sunDir, u).normalize();
   const theta = thetaDeg * D2R;
   const c = Math.cos(theta);
   const s = Math.sin(theta);
+  // `u` is the normal of the plane through the sub-solar point and both poles —
+  // the noon meridian — so cos(a) alone says which side of noon a point is on,
+  // whatever the ring's radius or the sun's declination. cos(a) > 0 puts the
+  // point at negative hour angle (morning/west); the half arcs are swept
+  // between the two cos(a) = 0 crossings so each one *ends* on that meridian
+  // rather than stopping part way round. Sweeping the range beats filtering the
+  // full circle: the kept points there wrap the array ends and the line closes
+  // itself with a chord straight across the globe.
+  const HALF = Math.PI / 2;
+  const from = side === 'east' ? HALF : side === 'west' ? -HALF : 0;
+  const span = side === 'both' ? Math.PI * 2 : Math.PI;
   const pts: THREE.Vector3[] = [];
   for (let i = 0; i <= segments; i++) {
-    const a = (i / segments) * Math.PI * 2;
+    const a = from + (i / segments) * span;
     pts.push(
       new THREE.Vector3()
         .addScaledVector(sunDir, c * radius)
@@ -817,6 +865,7 @@ export class HomeGlobe {
       // the resulting prayer times happen to be identical.
       data.fajrTwilightDeg,
       data.ishaTwilightDeg ?? 'no-isha-angle',
+      data.ishaIntervalMin ?? 'no-isha-interval',
       data.asrShadowFactor,
     ].join('|');
   }
@@ -1458,26 +1507,55 @@ export class HomeGlobe {
       this.prayerLineMaterials.push(mat);
       this.prayerLinesGroup.add(new Line2(geo, mat));
     };
-    const addCircle = (thetaDeg: number, color: string, opacity: number, widthPx: number) =>
-      addFatLine(sunAltitudeCircle(sunDir, thetaDeg, radius), color, opacity, widthPx);
+    const addCircle = (
+      thetaDeg: number,
+      color: string,
+      opacity: number,
+      widthPx: number,
+      side: 'both' | 'east' | 'west' = 'both'
+    ) => addFatLine(sunAltitudeCircle(sunDir, thetaDeg, radius, side), color, opacity, widthPx);
 
     // Every ring but the terminator is derived: the twilight depression comes
     // from the calculation method, and the Asr altitude from the user's
     // latitude, today's declination (sunLat) and the Asr madhab.
     const fajrRing = twilightRingDeg(this.data.fajrTwilightDeg);
     // Interval-based methods fix Isha at Maghrib + N minutes, so no solar angle
-    // exists and there is no ring to draw. The label still needs an anchor, so
-    // it borrows the Fajr ring's eastern side.
+    // exists and there is no ring at a fixed depression. ishaSunLon below
+    // carries what those methods use instead.
     const ishaRing = this.data.ishaTwilightDeg === null ? null : twilightRingDeg(this.data.ishaTwilightDeg);
+    // For a method with no Isha angle, the sub-solar longitude whose terminator
+    // is today's Isha line. See intervalIshaSunLon.
+    const ishaSunLon =
+      ishaRing === null && this.data.ishaIntervalMin
+        ? intervalIshaSunLon(sunLon, this.data.ishaIntervalMin)
+        : null;
     const asrRing = asrRingDeg(this.data.latitude, sunLat, this.data.asrShadowFactor);
 
     // Horizon (sunrise/sunset terminator), twilight (fajr/isha), Asr.
+    // The terminator is the one full circle: sunrise on its western half,
+    // maghrib on its eastern. The rest take the half their prayer falls on —
+    // Fajr and Asr and Isha are each a single time of day, not a pair.
     addCircle(HORIZON_ANGLE_DEG, SUNRISE_COLOR, 0.95, SOLAR_LINE_WIDTH_PX);
-    addCircle(fajrRing, FAJR_COLOR, 0.75, SOLAR_LINE_WIDTH_PX);
-    if (ishaRing !== null && ishaRing !== fajrRing) {
-      addCircle(ishaRing, ISHA_COLOR, 0.75, SOLAR_LINE_WIDTH_PX);
+    addCircle(fajrRing, FAJR_COLOR, 0.75, SOLAR_LINE_WIDTH_PX, 'west');
+    if (ishaRing !== null) {
+      // Isha needs its evening half drawn even when the method puts it at the
+      // same depression as Fajr: the Fajr line is now the morning half only, so
+      // it no longer covers for both the way the old whole circle did.
+      addCircle(ishaRing, ISHA_COLOR, 0.75, SOLAR_LINE_WIDTH_PX, 'east');
+    } else if (ishaSunLon !== null) {
+      // Interval-based method: no ring exists, so draw the terminator as it
+      // stood when the sun set on the places that are at Isha now. Before the
+      // rings were halved, Fajr's whole circle happened to pass close enough to
+      // this to serve as a stand-in; with Fajr reduced to its morning half the
+      // stand-in is gone and the label was left floating over nothing.
+      addFatLine(
+        sunAltitudeCircle(v3(this.globe.getCoords(sunLat, ishaSunLon, 1)).normalize(), HORIZON_ANGLE_DEG, radius, 'east'),
+        ISHA_COLOR,
+        0.75,
+        SOLAR_LINE_WIDTH_PX
+      );
     }
-    addCircle(asrRing, ASR_COLOR, 0.85, SOLAR_LINE_WIDTH_PX);
+    addCircle(asrRing, ASR_COLOR, 0.85, SOLAR_LINE_WIDTH_PX, 'east');
 
     // Noon meridian (Dhuhr).
     addFatLine(meridianPoints(sunLon, radius), NOON_COLOR, 1, SOLAR_LINE_WIDTH_PX);
@@ -1493,7 +1571,14 @@ export class HomeGlobe {
     const sunriseAt = at(HORIZON_ANGLE_DEG, -S, -1);
     const asrAt = at(asrRing, 0, 1);
     const maghribAt = at(HORIZON_ANGLE_DEG, -S, 1);
-    const ishaAt = at(ishaRing ?? fajrRing, S, 1);
+    // The label rides whichever line Isha was actually drawn on.
+    const ishaAt =
+      ishaSunLon !== null
+        ? labelPoint(sunLat, ishaSunLon, HORIZON_ANGLE_DEG, S, 1) ?? {
+            lat: 0,
+            lon: ishaSunLon + HORIZON_ANGLE_DEG,
+          }
+        : at(ishaRing ?? fajrRing, S, 1);
 
     addLabel(fajrAt.lat, fajrAt.lon, fmt('fajr'), PRAYER_ACCENTS.fajr);
     addLabel(sunriseAt.lat, sunriseAt.lon, fmt('sunrise'), PRAYER_ACCENTS.sunrise);
