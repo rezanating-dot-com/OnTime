@@ -2,56 +2,108 @@
 
 **OnTime — Islamic Prayer Times**
 
-*Last updated: February 6, 2026*
+*Last updated: September 10, 2026*
 
 ## Overview
 
-OnTime is designed with privacy in mind. The app performs all prayer time calculations locally on your device. We do not collect, store, or sell any personal data.
+OnTime calculates your prayer times on your device. There are no accounts, no
+analytics, no advertising, and no third-party SDKs that collect data. Nothing
+you do in the app is reported to us, because there is nowhere for it to be
+reported to — we do not run a server.
 
-## Data That Stays on Your Device
+This policy describes every request the app makes to anyone else's server, and
+what each one reveals.
 
-The following data is stored **only on your device** and is never transmitted to any server:
+## Data that stays on your device
 
-- Prayer calculation settings and preferences
-- Prayer tracking history
-- Jumuah and travel mode settings
-- Theme and display preferences
-- Your home base location (for travel mode)
+Stored on your device only, and never transmitted anywhere:
 
-All data is stored locally using your device's storage and is not accessible to us or any third party.
+- Your prayer calculation method, Asr madhab, and display preferences
+- Your prayer tracking history
+- Jumuah, travel mode, and notification settings
+- Your home base location, used by travel mode
+- Theme and design choices
+- Downloaded athan audio
 
-## Location Data
+All prayer times, Qibla bearings, and sun positions are computed on the device
+from your coordinates. That arithmetic never leaves the phone.
 
-OnTime requests access to your device's GPS location to calculate accurate prayer times and Qibla direction for your position. This location data is:
+## Location
 
-- **Processed locally** on your device for prayer time calculations
-- **Sent to OpenStreetMap's Nominatim service** solely to convert your coordinates into a human-readable location name (e.g., "Toronto, Canada"). This is the only external network request the app makes. You can review Nominatim's usage policy at https://operations.osmfoundation.org/policies/nominatim/
-- **Never stored on any external server** by us
-- **Never shared with advertisers or third parties** by us
+OnTime asks for your device's location to calculate prayer times and the Qibla
+direction. Approximate ("coarse") location is enough; the app works fine if you
+choose it, and it works fine if you decline location entirely and set your city
+by hand.
 
-You can also set your location manually without using GPS.
+Your coordinates leave the device in three situations, all described below.
 
-## Third-Party Services
+## Every network request the app makes
 
-The app uses the following third-party service:
+**1. Naming your city — OpenStreetMap Nominatim**
+`nominatim.openstreetmap.org`
 
-- **OpenStreetMap / Nominatim** — For reverse geocoding (coordinates to city name) and embedded map display. OpenStreetMap is an open-source project governed by the OpenStreetMap Foundation. Their privacy policy is available at https://wiki.osmfoundation.org/wiki/Privacy_Policy
+Your coordinates are sent so the app can show a place name instead of two
+numbers. This happens when your location is first found and whenever you
+refresh it. Nominatim's usage policy:
+https://operations.osmfoundation.org/policies/nominatim/
 
-## No Accounts, No Analytics, No Ads
+**2. The map preview — OpenStreetMap**
+`openstreetmap.org`
 
-- OnTime does not require you to create an account
-- OnTime does not use any analytics or tracking services
-- OnTime does not display advertisements
-- OnTime does not contain any third-party SDKs that collect data
+Tapping your city name opens a small map centred on you. That embedded map is
+loaded from OpenStreetMap and receives your coordinates, along with whatever a
+web request normally carries, including your IP address. It loads only when you
+open that preview.
 
-## Children's Privacy
+**3. The globe's surface imagery — Esri**
+`server.arcgisonline.com`
 
-OnTime does not knowingly collect any personal information from children. The app does not require any personal information to function.
+The globe home screen paints the Earth with satellite imagery streamed from
+Esri's World Imagery service. It requests map squares, not coordinates — but
+the squares it asks for are the ones around you, because the globe opens
+pointed at your location, so **these requests reveal roughly where you are**.
+A cold start at the default zoom fetches about sixteen of them. Zooming in
+requests smaller squares, which narrows that further. Esri's privacy policy:
+https://www.esri.com/en-us/privacy/overview
 
-## Changes to This Policy
+Switching the home screen to the list view means this never runs.
 
-If we update this privacy policy, the changes will be reflected on this page with an updated date.
+**4. Athan recordings — Assabile**
+`www.assabile.com`
+
+Only when you go looking for them. Opening the athan sound picker in Settings
+fetches the list of available recordings, and choosing one downloads that audio
+file to your device. Nothing about you is sent beyond what any web request
+carries. Once downloaded, the audio plays from your device with no further
+requests.
+
+## What we do not do
+
+- No account, ever
+- No analytics, crash reporting, or telemetry
+- No advertising, and no advertising identifiers
+- No third-party SDKs that collect data
+- No selling or sharing of anything, because we hold nothing
+
+## Permissions, and why
+
+- **Location** — prayer times and Qibla direction
+- **Notifications** — prayer reminders and athan alerts
+- **Exact alarms** — so a prayer notification arrives at the prayer time rather
+  than whenever the system next feels like waking the app
+- **Ignore battery optimisations** *(optional, you are asked)* — so reminders
+  survive aggressive power saving on some devices
+
+## Children's privacy
+
+OnTime collects no personal information from anyone, children included, and
+needs none to work.
+
+## Changes to this policy
+
+Changes appear on this page with a new date at the top. The version that
+matters is the one shipping with the app you have installed.
 
 ## Contact
 
-If you have questions about this privacy policy, you can reach us by opening an issue at https://github.com/rezalogicly/OnTime/issues
+Open an issue at https://github.com/rezanating-dot-com/OnTime/issues
