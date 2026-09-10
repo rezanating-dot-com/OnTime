@@ -11,6 +11,8 @@ import {
   getTodayKey,
   getDateKey,
   loadTrackingData,
+  getTodayStatuses,
+  resetTrackingCache,
 } from '../services/prayerTrackingService';
 
 // Not exported by the service; the literal key its blob lives under.
@@ -22,6 +24,9 @@ describe('User story: I can track whether I prayed on time', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     storage = {};
+    // The service keeps the parsed blob for the session; each test starts from
+    // empty storage, so it has to start from an empty cache too.
+    resetTrackingCache();
 
     vi.mocked(Preferences.get).mockImplementation(async ({ key }) => {
       return { value: storage[key] || null };
@@ -141,12 +146,16 @@ describe('User story: I can track whether I prayed on time', () => {
     expect(first.records[0].date).toBe(getDateKey(isha));
     expect(JSON.parse(storage[TRACKING_KEY]).dayKeySchema).toBeTruthy();
 
-    // Now the device has changed timezone. Re-deriving trackedAt would file
-    // this prayer under a different day than it was actually prayed, so the
-    // marker has to short-circuit the repair and leave the record where it is.
+    // Now the device has changed timezone and the app has been relaunched.
+    // Re-deriving trackedAt would file this prayer under a different day than
+    // it was actually prayed, so the marker has to short-circuit the repair and
+    // leave the record where it is. The reset stands in for the relaunch: the
+    // service holds the parsed blob for a session, and this edit goes in behind
+    // its back.
     const blob = JSON.parse(storage[TRACKING_KEY]);
     blob.records[0].date = legacyKey;
     storage[TRACKING_KEY] = JSON.stringify(blob);
+    resetTrackingCache();
 
     const second = await loadTrackingData();
     expect(second.records[0].date).toBe(legacyKey);
@@ -170,5 +179,57 @@ describe('User story: I can track whether I prayed on time', () => {
     expect(data.records).toHaveLength(1);
     expect(data.records[0].status).toBe('ontime');
     expect(data.records[0].date).toBe(getDateKey(noon));
+  });
+});
+
+/**
+ * User story: I open the prayer list. The checkmarks for today's five prayers
+ * appear together, without the app going back to storage once per prayer.
+ */
+describe('reading today’s statuses', () => {
+  let storage: Record<string, string> = {};
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    storage = {};
+    resetTrackingCache();
+    vi.mocked(Preferences.get).mockImplementation(async ({ key }) => ({ value: storage[key] || null }));
+    vi.mocked(Preferences.set).mockImplementation(async ({ key, value }) => {
+      storage[key] = value;
+    });
+  });
+
+  it('reports every asked-for prayer, tracked or not', async () => {
+    await trackPrayer('fajr', 'ontime');
+    await trackPrayer('asr', 'missed');
+
+    const statuses = await getTodayStatuses(['fajr', 'dhuhr', 'asr', 'maghrib', 'isha']);
+
+    expect(statuses).toEqual({
+      fajr: 'ontime',
+      dhuhr: 'untracked',
+      asr: 'missed',
+      maghrib: 'untracked',
+      isha: 'untracked',
+    });
+  });
+
+  it('goes to storage once for the whole set, not once per prayer', async () => {
+    await trackPrayer('fajr', 'ontime');
+    vi.mocked(Preferences.get).mockClear();
+
+    await getTodayStatuses(['fajr', 'dhuhr', 'asr', 'maghrib', 'isha']);
+
+    expect(vi.mocked(Preferences.get).mock.calls.length).toBeLessThanOrEqual(1);
+  });
+
+  it('does not hand back a status from another day', async () => {
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    await trackPrayer('isha', 'ontime', yesterday);
+
+    const statuses = await getTodayStatuses(['isha']);
+
+    expect(statuses.isha).toBe('untracked');
   });
 });

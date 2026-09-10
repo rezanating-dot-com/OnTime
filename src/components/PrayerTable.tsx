@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { formatTime, getTimeUntil, isValidPrayerTime } from '../services/prayerService';
-import { trackPrayer, getPrayerStatus, type PrayerStatus } from '../services/prayerTrackingService';
+import { trackPrayer, getTodayStatuses, type PrayerStatus } from '../services/prayerTrackingService';
 import { useSettings } from '../context/SettingsContext';
 import { useTravel } from '../context/TravelContext';
 import type { PrayerTime, PrayerName, AllPrayerNames, TravelState } from '../types';
@@ -94,14 +94,9 @@ export const PrayerTable = React.memo(function PrayerTable({ prayers, currentPra
   // day's prayers change (the list rolls over at local midnight; without this
   // the table is memoized and yesterday's checkmarks persist into today).
   useEffect(() => {
-    async function loadStatus() {
-      const status: Record<string, PrayerStatus> = {};
-      for (const prayer of TRACKABLE_PRAYERS) {
-        status[prayer] = await getPrayerStatus(prayer);
-      }
-      setTrackingStatus(status);
-    }
-    loadStatus();
+    // One read of the stored blob for all five, not five sequential ones — the
+    // checkmarks used to wait on a chain of storage round-trips.
+    getTodayStatuses(TRACKABLE_PRAYERS).then(setTrackingStatus);
   }, [prayers]);
 
   // Filter prayers based on settings

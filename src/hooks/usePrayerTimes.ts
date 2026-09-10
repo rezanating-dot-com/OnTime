@@ -54,9 +54,10 @@ export function usePrayerTimes() {
   // would re-run it on every recompute.
   const nextPrayerTimeMs = prayerData.nextPrayerTime?.getTime() ?? null;
 
-  // Which passed target we have already recalculated for, so a target that
-  // fails to advance can't spin this effect forever.
-  const refreshedForMs = useRef<number | null>(null);
+  // When we last recalculated, and for which target. A target that fails to
+  // advance must not spin this effect, but refusing outright is a trap: see
+  // refresh() below.
+  const lastRefresh = useRef<{ ms: number; at: number } | null>(null);
 
   // Recalculate when the next prayer actually arrives.
   //
@@ -81,9 +82,32 @@ export function usePrayerTimes() {
   useEffect(() => {
     if (nextPrayerTimeMs === null) return;
 
+    // Rate-limited rather than one-shot. This used to refuse outright once it
+    // had recalculated for a given target, which strands the boundary if a
+    // refresh ever lands *before* that target: the recalculation then rebuilds
+    // the same instant, the effect's dependency does not change so it never
+    // re-arms, and the watchdog behind it is locked out of ever trying again.
+    // The app then sits on a prayer that has already passed until midnight or
+    // a settings change moves it.
+    //
+    // A backward step of the system clock while a timer is pending is the way
+    // in: setTimeout counts elapsed time, so a timer armed for 12:00 fires
+    // after its full delay whatever the clock has been set to in between, and
+    // the clock can read 11:55 when it does. NTP corrections and a user
+    // setting the clock both do this.
+    //
+    // One recalculation per watchdog interval per target keeps the render
+    // storm PM-1 fixed out of reach, while leaving a way back. A clock that
+    // has moved backwards since the last attempt is itself a reason to
+    // recalculate, so it does not count against the limit.
     const refresh = () => {
-      if (refreshedForMs.current === nextPrayerTimeMs) return;
-      refreshedForMs.current = nextPrayerTimeMs;
+      const now = Date.now();
+      const previous = lastRefresh.current;
+      if (previous && previous.ms === nextPrayerTimeMs) {
+        const since = now - previous.at;
+        if (since >= 0 && since < BOUNDARY_WATCHDOG_MS) return;
+      }
+      lastRefresh.current = { ms: nextPrayerTimeMs, at: now };
       setDate(new Date());
     };
 

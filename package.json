@@ -11,12 +11,13 @@
     "cap:sync": "cap sync",
     "cap:android": "cap open android",
     "cap:ios": "cap open ios",
-    "build:android": "npm run build && cap sync android",
-    "build:ios": "npm run build && cap sync ios",
-    "build:all": "npm run build && cap sync",
+    "build:android": "npm run build && npm run cap:clean && cap sync android",
+    "build:ios": "npm run build && npm run cap:clean && cap sync ios",
+    "build:all": "npm run build && npm run cap:clean && cap sync",
     "test": "vitest run",
     "test:watch": "vitest",
-    "postinstall": "patch-package"
+    "postinstall": "patch-package",
+    "cap:clean": "node scripts/clean-native-web-assets.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^8.0.2",
@@ -36,9 +37,6 @@
     "@fontsource/inter": "^5.3.0",
     "@fontsource/jetbrains-mono": "^5.3.0",
     "@fontsource/ubuntu": "^5.3.0",
-    "@fortawesome/fontawesome-svg-core": "^7.1.0",
-    "@fortawesome/free-solid-svg-icons": "^7.1.0",
-    "@fortawesome/react-fontawesome": "^3.2.0",
     "adhan": "^4.4.3",
     "globe.gl": "^2.46.2",
     "react": "^19.2.0",

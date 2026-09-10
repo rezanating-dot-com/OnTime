@@ -42,6 +42,10 @@ const LABEL_HEIGHT = 0.11;
 const QIBLA_ARC_WIDTH_PX = 4;
 /** Labels fade out as they swing this far from the centre of the view. */
 const LABEL_FADE_START = Math.cos(52 * D2R);
+
+// Scratch vectors for fadeLabelsNearTheEdge(), which runs once a frame.
+const TO_CAMERA = new THREE.Vector3();
+const LABEL_WORLD = new THREE.Vector3();
 const LABEL_FADE_END = Math.cos(78 * D2R);
 
 const v3 = (p: Vec3) => new THREE.Vector3(p.x, p.y, p.z);
@@ -184,8 +188,10 @@ export class QiblaGlobe extends Base3D<QiblaGlobeData> {
   /** Keep labels from being clipped as they swing towards the horizon. */
   private fadeLabelsNearTheEdge(): void {
     if (!this.sprites.length) return;
-    const toCamera = this.camera.position.clone().normalize();
-    const world = new THREE.Vector3();
+    // Scratch vectors rather than a clone and a fresh allocation: this runs
+    // every frame the qibla globe is on screen.
+    const toCamera = TO_CAMERA.copy(this.camera.position).normalize();
+    const world = LABEL_WORLD;
     for (const sprite of this.sprites) {
       sprite.getWorldPosition(world);
       const facing = world.normalize().dot(toCamera);
