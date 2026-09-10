@@ -59,13 +59,49 @@ On request ("how's qwen doing"), analyze the log: acceptance rate, what
 kinds of tasks it's reliable on, false-positive rate on reviews, typical
 wall time.
 
-## When to escalate past qwen
+## When to escalate past qwen — `scripts/ds-review.mjs`
 
-If qwen's output is consistently rejected for a task category, or a
-second-opinion review needs more judgment than 27B can give, port
-`logicly/scripts/ds-review.ts` here (DeepSeek v4-pro via API — a proven
-recipe, ~20 min to adapt). Nothing in OnTime blocks this; there's no
-PHI/secrets boundary to design around like there was in logicly.
+The escalation this section used to describe as future work has been done.
+`scripts/ds-review.mjs` is the paid rung: DeepSeek via API, review-only,
+logged to `docs/ds-review-log.jsonl` the same way qwen's work is logged to
+`docs/qwen-task-log.jsonl`. Use it when a second opinion needs more judgment
+than 27B can give, or when qwen is busy with another task.
+
+```bash
+node scripts/ds-review.mjs                    # HEAD vs main
+node scripts/ds-review.mjs --base dev         # vs another base
+node scripts/ds-review.mjs --worktree         # uncommitted changes
+node scripts/ds-review.mjs --focus perf --file src/a.ts --file src/b.ts
+```
+
+Needs `DEEPSEEK_API_KEY` in the environment or in `.env.local` (gitignored
+by the `*.local` rule). Reviewing a branch diff takes seconds and costs
+cents — nothing like qwen's minutes of CPU inference.
+
+Three things learned setting it up, all of them the kind that waste an hour:
+
+- **Thinking is off by default, and that is not a cosmetic choice.**
+  `deepseek-flash` is a reasoning model whose reasoning is billed against
+  the same `max_tokens` budget as its answer. On an 89k-char review prompt
+  it burned 32,000 and then 64,000 reasoning tokens and returned *empty
+  content* both times — no output at all, not truncated output. 64,000 is
+  the ceiling the API accepts, so there is no raising your way out of it.
+  With thinking disabled the same prompt answers in seven seconds. `--think`
+  re-enables it; keep the input small if you use it.
+- **The model does not know what is switched off.** Two of the four
+  cold-read perf reviews spent their top findings on the ground-view compass
+  path and the sun dome, both of which are commented out of the app. Check
+  whether a hot path is actually reachable before acting on a finding about
+  it.
+- **Same rule as qwen, harder.** DeepSeek is an advisor, never the author or
+  the reviewer of record. The logicly pilot measured v4-pro; `flash` is the
+  cheaper, weaker model, so verify every finding against the real code
+  before acting. Across five reviews it landed 8 of 27 findings as
+  actionable, with the rest split between dead code, deliberate trade-offs,
+  and three outright wrong claims.
+
+Retro on request ("how's DeepSeek doing"): analyse
+`docs/ds-review-log.jsonl` for unique catches, false-positive rate and cost.
 
 ## Practical notes
 
