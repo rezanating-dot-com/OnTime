@@ -156,6 +156,7 @@ export function HomeGlobeScreen({ prayers, covered = false }: { prayers: PrayerT
             prayers,
             fajrTwilightDeg: twilight.fajr,
             ishaTwilightDeg: twilight.isha,
+            ishaIntervalMin: twilight.ishaIntervalMin,
             asrShadowFactor: shadowFactorFor(settings.asrCalculation),
             groundMode,
             deviceHeading,

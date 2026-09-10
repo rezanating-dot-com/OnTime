@@ -43,20 +43,24 @@ describe('twilight angles per calculation method (GL-4)', () => {
   });
 
   it('matches adhan where the methods disagree with each other', () => {
-    expect(twilightAnglesFor('MuslimWorldLeague')).toEqual({ fajr: 18, isha: 17 });
-    expect(twilightAnglesFor('Egyptian')).toEqual({ fajr: 19.5, isha: 17.5 });
-    expect(twilightAnglesFor('NorthAmerica')).toEqual({ fajr: 15, isha: 15 });
-    expect(twilightAnglesFor('Singapore')).toEqual({ fajr: 20, isha: 18 });
-    expect(twilightAnglesFor('Tehran')).toEqual({ fajr: 17.7, isha: 14 });
-    expect(twilightAnglesFor('Dubai')).toEqual({ fajr: 18.2, isha: 18.2 });
-    expect(twilightAnglesFor('Kuwait')).toEqual({ fajr: 18, isha: 17.5 });
+    // ishaIntervalMin is null throughout here: every method in this list gives
+    // Isha an angle. The interval-based ones are covered below.
+    expect(twilightAnglesFor('MuslimWorldLeague')).toEqual({ fajr: 18, isha: 17, ishaIntervalMin: null });
+    expect(twilightAnglesFor('Egyptian')).toEqual({ fajr: 19.5, isha: 17.5, ishaIntervalMin: null });
+    expect(twilightAnglesFor('NorthAmerica')).toEqual({ fajr: 15, isha: 15, ishaIntervalMin: null });
+    expect(twilightAnglesFor('Singapore')).toEqual({ fajr: 20, isha: 18, ishaIntervalMin: null });
+    expect(twilightAnglesFor('Tehran')).toEqual({ fajr: 17.7, isha: 14, ishaIntervalMin: null });
+    expect(twilightAnglesFor('Dubai')).toEqual({ fajr: 18.2, isha: 18.2, ishaIntervalMin: null });
+    expect(twilightAnglesFor('Kuwait')).toEqual({ fajr: 18, isha: 17.5, ishaIntervalMin: null });
   });
 
   it('reports no isha angle for the interval-based methods', () => {
     // Isha is Maghrib + 90 minutes here, so there is no solar depression to
-    // draw a ring at and the globe must not invent one.
+    // draw a ring at and the globe must not invent one. It gets the interval
+    // instead, which is what it places Isha's line from.
     for (const method of INTERVAL_ISHA) {
       expect(twilightAnglesFor(method).isha, method).toBeNull();
+      expect(twilightAnglesFor(method).ishaIntervalMin, method).toBeGreaterThan(0);
     }
     expect(twilightAnglesFor('UmmAlQura').fajr).toBe(18.5);
     expect(twilightAnglesFor('Qatar').fajr).toBe(18);

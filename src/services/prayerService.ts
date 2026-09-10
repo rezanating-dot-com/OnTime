@@ -57,11 +57,18 @@ function getCalculationParameters(method: CalcMethodType): CalculationParameters
  *
  * `isha` is null for the interval-based methods (Umm al-Qura, Qatar), where
  * Isha is Maghrib plus a fixed number of minutes and no solar angle exists.
+ * Those return that interval instead, in minutes, which is enough to place
+ * Isha on the globe: it is the terminator as it stood that many minutes ago.
  */
-export function twilightAnglesFor(method: CalcMethodType): { fajr: number; isha: number | null } {
+export function twilightAnglesFor(method: CalcMethodType): {
+  fajr: number;
+  isha: number | null;
+  ishaIntervalMin: number | null;
+} {
   const params = getCalculationParameters(method);
-  const isha = params.ishaInterval > 0 || params.ishaAngle <= 0 ? null : params.ishaAngle;
-  return { fajr: params.fajrAngle, isha };
+  const interval = params.ishaInterval > 0 ? params.ishaInterval : null;
+  const isha = interval !== null || params.ishaAngle <= 0 ? null : params.ishaAngle;
+  return { fajr: params.fajrAngle, isha, ishaIntervalMin: interval };
 }
 
 /**

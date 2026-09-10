@@ -24,6 +24,8 @@ export interface HomeGlobeData {
   fajrTwilightDeg: number;
   /** Isha twilight angle, or null for interval-based methods (Umm al-Qura, Qatar). */
   ishaTwilightDeg: number | null;
+  /** Minutes after Maghrib that Isha falls, for those interval-based methods. */
+  ishaIntervalMin?: number | null;
   /** Asr shadow factor: 1 for the standard (Shafi'i) rule, 2 for Hanafi. */
   asrShadowFactor: number;
   /** Ground-view (qibla) mode: camera drops to the user and follows the compass. */
@@ -234,6 +236,23 @@ export function geo2xyz(lat: number, lon: number, r: number): { x: number; y: nu
  */
 function twilightRingDeg(degBelowHorizon: number): number {
   return 90 + degBelowHorizon;
+}
+
+/**
+ * Where an interval-based Isha falls on the globe.
+ *
+ * Umm al-Qura and Qatar put Isha at Maghrib plus a fixed number of minutes, so
+ * there is no sun altitude to build a ring from — no depression angle exists
+ * to be on. But the places where it is Isha right now are exactly the places
+ * where the sun set that many minutes ago, so the line is the terminator as it
+ * stood then: the same circle, drawn around where the sun was. The Earth turns
+ * 15 degrees an hour, so that is a quarter of a degree of sub-solar longitude
+ * per minute, eastward of where the sun is now.
+ *
+ * Returns the sub-solar longitude to draw that terminator around.
+ */
+export function intervalIshaSunLon(sunLon: number, intervalMinutes: number): number {
+  return sunLon + intervalMinutes / 4;
 }
 
 /**
@@ -846,6 +865,7 @@ export class HomeGlobe {
       // the resulting prayer times happen to be identical.
       data.fajrTwilightDeg,
       data.ishaTwilightDeg ?? 'no-isha-angle',
+      data.ishaIntervalMin ?? 'no-isha-interval',
       data.asrShadowFactor,
     ].join('|');
   }
@@ -1500,9 +1520,15 @@ export class HomeGlobe {
     // latitude, today's declination (sunLat) and the Asr madhab.
     const fajrRing = twilightRingDeg(this.data.fajrTwilightDeg);
     // Interval-based methods fix Isha at Maghrib + N minutes, so no solar angle
-    // exists and there is no ring to draw. The label still needs an anchor, so
-    // it borrows the Fajr ring's eastern side.
+    // exists and there is no ring at a fixed depression. ishaSunLon below
+    // carries what those methods use instead.
     const ishaRing = this.data.ishaTwilightDeg === null ? null : twilightRingDeg(this.data.ishaTwilightDeg);
+    // For a method with no Isha angle, the sub-solar longitude whose terminator
+    // is today's Isha line. See intervalIshaSunLon.
+    const ishaSunLon =
+      ishaRing === null && this.data.ishaIntervalMin
+        ? intervalIshaSunLon(sunLon, this.data.ishaIntervalMin)
+        : null;
     const asrRing = asrRingDeg(this.data.latitude, sunLat, this.data.asrShadowFactor);
 
     // Horizon (sunrise/sunset terminator), twilight (fajr/isha), Asr.
@@ -1516,6 +1542,18 @@ export class HomeGlobe {
       // same depression as Fajr: the Fajr line is now the morning half only, so
       // it no longer covers for both the way the old whole circle did.
       addCircle(ishaRing, ISHA_COLOR, 0.75, SOLAR_LINE_WIDTH_PX, 'east');
+    } else if (ishaSunLon !== null) {
+      // Interval-based method: no ring exists, so draw the terminator as it
+      // stood when the sun set on the places that are at Isha now. Before the
+      // rings were halved, Fajr's whole circle happened to pass close enough to
+      // this to serve as a stand-in; with Fajr reduced to its morning half the
+      // stand-in is gone and the label was left floating over nothing.
+      addFatLine(
+        sunAltitudeCircle(v3(this.globe.getCoords(sunLat, ishaSunLon, 1)).normalize(), HORIZON_ANGLE_DEG, radius, 'east'),
+        ISHA_COLOR,
+        0.75,
+        SOLAR_LINE_WIDTH_PX
+      );
     }
     addCircle(asrRing, ASR_COLOR, 0.85, SOLAR_LINE_WIDTH_PX, 'east');
 
@@ -1533,7 +1571,14 @@ export class HomeGlobe {
     const sunriseAt = at(HORIZON_ANGLE_DEG, -S, -1);
     const asrAt = at(asrRing, 0, 1);
     const maghribAt = at(HORIZON_ANGLE_DEG, -S, 1);
-    const ishaAt = at(ishaRing ?? fajrRing, S, 1);
+    // The label rides whichever line Isha was actually drawn on.
+    const ishaAt =
+      ishaSunLon !== null
+        ? labelPoint(sunLat, ishaSunLon, HORIZON_ANGLE_DEG, S, 1) ?? {
+            lat: 0,
+            lon: ishaSunLon + HORIZON_ANGLE_DEG,
+          }
+        : at(ishaRing ?? fajrRing, S, 1);
 
     addLabel(fajrAt.lat, fajrAt.lon, fmt('fajr'), PRAYER_ACCENTS.fajr);
     addLabel(sunriseAt.lat, sunriseAt.lon, fmt('sunrise'), PRAYER_ACCENTS.sunrise);
