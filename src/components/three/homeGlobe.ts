@@ -87,6 +87,32 @@ const TILE_ENABLE_FALLBACK_MS = 2500;
 const TILE_HOST = 'server.arcgisonline.com';
 
 /**
+ * How much detail the bundled photo carries, in the tile engine's own units.
+ *
+ * A slippy level L wraps 256 * 2^L pixels around the equator, so a photo of
+ * width W is worth level log2(W / 256). Derived rather than written down: a
+ * constant that has to be kept in step with an image file by hand is a
+ * constant that drifts.
+ */
+const BASE_TEXTURE_WIDTH = 4096;
+const BASE_TEXTURE_LEVEL = Math.log2(BASE_TEXTURE_WIDTH / 256);
+
+/**
+ * The altitude below which streamed tiles are worth having.
+ *
+ * The engine picks level L while `8 / 2^L <= altitude < 8 / 2^(L-1)`, so the
+ * first level carrying *more* detail than the photo only arrives below this.
+ * Above it the stream was painting a coarser image over a finer one — at the
+ * default framing of 2.5 it fetched level 2, a thousand pixels around the
+ * equator, over a photo worth four thousand. That is what "the map goes low
+ * res when I zoom out" was.
+ */
+const TILE_ENABLE_ALTITUDE = 8 / 2 ** BASE_TEXTURE_LEVEL;
+/** Turn the stream back off a little higher than it came on, so a pinch that
+ *  hovers on the boundary cannot flap it. */
+const TILE_DISABLE_ALTITUDE = TILE_ENABLE_ALTITUDE * 1.4;
+
+/**
  * three-slippy-map-globe loads its surface tiles through a bare TextureLoader,
  * so they report to THREE.DefaultLoadingManager — a single global slot with no
  * way to inject a manager of our own.
@@ -602,8 +628,9 @@ export class HomeGlobe {
       .showAtmosphere(true)
       .atmosphereColor('#4d7fbf')
       .atmosphereAltitude(0.12);
-    // Safety net: never leave the surface tile-less if the base somehow fails.
-    setTimeout(() => this.enableTiles(), TILE_ENABLE_FALLBACK_MS);
+    // Safety net: never leave the surface tile-less if the base somehow fails
+    // — but only where tiles would actually be an improvement.
+    setTimeout(() => this.syncTileEngine(), TILE_ENABLE_FALLBACK_MS);
 
     const controls = this.globe.controls();
     controls.autoRotate = false;
@@ -617,6 +644,10 @@ export class HomeGlobe {
       this.markAdjusted(true);
     });
     controls.addEventListener('end', () => this.scheduleIdlePause(1500));
+    // Every camera move, not just onZoom: onZoom does not fire for a
+    // programmatic pointOfView, and the tile gate must not depend on which way
+    // the camera was moved. Both checks are two comparisons.
+    controls.addEventListener('change', () => this.syncTileEngine());
 
     this.globe.onGlobeReady(() => {
       if (this.disposed) return;
@@ -639,6 +670,7 @@ export class HomeGlobe {
 
     this.globe.onZoom(() => {
       this.updateZoomFades();
+      this.syncTileEngine();
     });
 
     this.ro = new ResizeObserver(() => this.resize());
@@ -829,7 +861,40 @@ export class HomeGlobe {
     if (this.tilesEnabled || this.disposed) return;
     const mat = this.globe?.globeMaterial() as THREE.MeshPhongMaterial | undefined;
     if (!mat?.map) return;
-    this.enableTiles();
+    this.syncTileEngine();
+    // At the default framing the stream stays off, so the photo *is* the
+    // finished surface — nothing further is coming to wait for.
+    if (!this.tilesEnabled) this.fireSurfaceReady();
+  }
+
+  /**
+   * Start or stop the tile stream according to how close the camera is.
+   *
+   * Tiles are an improvement only below TILE_ENABLE_ALTITUDE; above it they are
+   * a coarser image painted over a finer one. Running both ways matters: a
+   * one-way gate would leave the first pinch-in streaming tiles for the rest of
+   * the session, including back out at the default framing where they look
+   * worse than the photo underneath.
+   */
+  private syncTileEngine(): void {
+    if (this.disposed || !this.globe || !this.ready) return;
+    // Measured off the camera, not read from pointOfView(). pointOfView lags
+    // its own transition — driven to altitude 0.3 it still reported 2.5 a beat
+    // later — and in ground view it is stale outright, because that mode moves
+    // the camera by hand. The camera orbits the centre, so its distance is the
+    // altitude, always current and true in every mode.
+    const cam = this.globe.camera() as THREE.PerspectiveCamera;
+    const altitude = cam.position.length() / GLOBE_RADIUS - 1;
+    if (!this.tilesEnabled && altitude < TILE_ENABLE_ALTITUDE) this.enableTiles();
+    else if (this.tilesEnabled && altitude > TILE_DISABLE_ALTITUDE) this.disableTiles();
+  }
+
+  /** Hand back the photo. three-globe hides the tile group and stops asking for
+   *  tiles, so the base shows through and nothing further is requested. */
+  private disableTiles(): void {
+    if (!this.tilesEnabled || this.disposed || !this.globe) return;
+    this.tilesEnabled = false;
+    (this.globe.globeTileEngineUrl as unknown as (u: null) => void)(null);
   }
 
   private enableTiles(): void {
