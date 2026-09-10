@@ -266,6 +266,13 @@ async function main() {
     // Whole-file review with no diff: a cold read of code that isn't changing.
     files = args.files.map((p) => {
       if (!existsSync(p)) throw new Error(`--file not found: ${p}`);
+      // The same filter the diff path applies through contentAt(). Without it
+      // this branch would read and transmit anything at all, including the
+      // .env.local this script reads its own key from — the header above
+      // promises that boundary, so enforce it rather than documenting it.
+      if (!REVIEWABLE.test(p)) {
+        throw new Error(`--file refuses ${p}: not a source file this script will transmit`);
+      }
       return { path: p, content: readFileSync(p, 'utf8') };
     });
     header = `Cold review of ${args.files.length} file(s) — no diff, judge the code as it stands.\n\n`;

@@ -1,3 +1,5 @@
+import { useId } from 'react';
+
 /**
  * The Kaaba, drawn rather than imported.
  *
@@ -15,9 +17,14 @@
  * two are what make it the Kaaba rather than a box.
  */
 export function KaabaIcon({ className }: { className?: string }) {
+  // SVG ids are document-global. A fixed one here would mean two of these on
+  // screen at once share a mask, and the survivor's cut-outs vanish when the
+  // first unmounts. Only one header renders at a time today, so this is a trap
+  // set rather than sprung — but it costs nothing to not set it.
+  const maskId = `kaaba-cutouts-${useId()}`;
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <mask id="kaaba-cutouts" maskUnits="userSpaceOnUse" x="0" y="0" width="24" height="24">
+      <mask id={maskId} maskUnits="userSpaceOnUse" x="0" y="0" width="24" height="24">
         <rect width="24" height="24" fill="#fff" />
         {/* Hollow the top face, so the cube reads as open-topped rather than
             as a solid blob at small sizes. */}
@@ -29,7 +36,7 @@ export function KaabaIcon({ className }: { className?: string }) {
         <path d="M3.2 9.6 12 14.4 12 15.7 3.2 10.9Z" fill="#000" />
         <path d="M20.8 9.6 12 14.4 12 15.7 20.8 10.9Z" fill="#000" />
       </mask>
-      <g mask="url(#kaaba-cutouts)">
+      <g mask={`url(#${maskId})`}>
         {/* Top face. */}
         <path d="M12 2.6 20.8 7.4 12 12.2 3.2 7.4Z" fill="currentColor" opacity="0.55" />
         {/* Left face, then right — two weights so they read as two planes. */}
