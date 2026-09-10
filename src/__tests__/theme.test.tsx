@@ -154,3 +154,48 @@ describe('browser chrome colour (ST-9)', () => {
     document.documentElement.classList.remove('dark', 'desert', 'rose', 'forest', 'ocean');
   });
 });
+
+/**
+ * User story: I run the app on Dark (or System, or Desert...). Nothing about
+ * the sky affects what I see, so nothing about the sky should be waking the
+ * phone up.
+ *
+ * Auto is the only theme that follows Maghrib and Fajr, but the minute timer
+ * that tracked them used to run for every user on every theme, for the whole
+ * life of the app.
+ */
+describe('the Auto theme’s minute timer', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+    document.documentElement.classList.remove('dark', 'desert', 'rose', 'forest', 'ocean');
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const renderWithTheme = async (stored: string) => {
+    const { Preferences } = await import('@capacitor/preferences');
+    vi.mocked(Preferences.get).mockResolvedValue({ value: stored });
+    const setInterval = vi.spyOn(globalThis, 'setInterval');
+    await act(async () => {
+      render(
+        <ThemeProvider>
+          <ThemeInspector onTheme={() => {}} />
+        </ThemeProvider>,
+      );
+    });
+    const minuteTimers = setInterval.mock.calls.filter(([, ms]) => ms === 60000);
+    setInterval.mockRestore();
+    return minuteTimers.length;
+  };
+
+  it('does not run on a theme that ignores the sky', async () => {
+    expect(await renderWithTheme('dark')).toBe(0);
+  });
+
+  it('runs on Auto, which is the theme that needs it', async () => {
+    expect(await renderWithTheme('auto')).toBeGreaterThan(0);
+  });
+});

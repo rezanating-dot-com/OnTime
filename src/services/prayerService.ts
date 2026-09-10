@@ -31,23 +31,26 @@ const PRAYER_LABELS: Record<AllPrayerNames, string> = {
   tahajjud: 'Tahajjud',
 };
 
-function getCalculationParameters(method: CalcMethodType): CalculationParameters {
-  const methods: Record<CalcMethodType, () => CalculationParameters> = {
-    MuslimWorldLeague: () => CalculationMethod.MuslimWorldLeague(),
-    Egyptian: () => CalculationMethod.Egyptian(),
-    Karachi: () => CalculationMethod.Karachi(),
-    UmmAlQura: () => CalculationMethod.UmmAlQura(),
-    Dubai: () => CalculationMethod.Dubai(),
-    MoonsightingCommittee: () => CalculationMethod.MoonsightingCommittee(),
-    NorthAmerica: () => CalculationMethod.NorthAmerica(),
-    Kuwait: () => CalculationMethod.Kuwait(),
-    Qatar: () => CalculationMethod.Qatar(),
-    Singapore: () => CalculationMethod.Singapore(),
-    Tehran: () => CalculationMethod.Tehran(),
-    Turkey: () => CalculationMethod.Turkey(),
-  };
+// Module scope, not rebuilt per call. Each entry still has to be a function:
+// adhan hands back a fresh parameters object that callers then mutate (madhab,
+// below), so they cannot share one instance.
+const METHOD_PARAMETERS: Record<CalcMethodType, () => CalculationParameters> = {
+  MuslimWorldLeague: () => CalculationMethod.MuslimWorldLeague(),
+  Egyptian: () => CalculationMethod.Egyptian(),
+  Karachi: () => CalculationMethod.Karachi(),
+  UmmAlQura: () => CalculationMethod.UmmAlQura(),
+  Dubai: () => CalculationMethod.Dubai(),
+  MoonsightingCommittee: () => CalculationMethod.MoonsightingCommittee(),
+  NorthAmerica: () => CalculationMethod.NorthAmerica(),
+  Kuwait: () => CalculationMethod.Kuwait(),
+  Qatar: () => CalculationMethod.Qatar(),
+  Singapore: () => CalculationMethod.Singapore(),
+  Tehran: () => CalculationMethod.Tehran(),
+  Turkey: () => CalculationMethod.Turkey(),
+};
 
-  return methods[method]();
+function getCalculationParameters(method: CalcMethodType): CalculationParameters {
+  return METHOD_PARAMETERS[method]();
 }
 
 /**

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { formatTime, getTimeUntil, isValidPrayerTime } from '../services/prayerService';
-import { trackPrayer, getPrayerStatus, type PrayerStatus } from '../services/prayerTrackingService';
+import { trackPrayer, getTodayStatuses, type PrayerStatus } from '../services/prayerTrackingService';
 import { useSettings } from '../context/SettingsContext';
 import { useTravel } from '../context/TravelContext';
 import { KhatamStar, GirihBackground } from './IslamicPatterns';
@@ -98,14 +98,9 @@ export const IslamicPrayerTable = React.memo(function IslamicPrayerTable({ praye
   // local midnight, and stale checkmarks from yesterday would otherwise be
   // drawn against today's rows until something else forced a re-render.
   useEffect(() => {
-    async function loadStatus() {
-      const status: Record<string, PrayerStatus> = {};
-      for (const prayer of TRACKABLE_PRAYERS) {
-        status[prayer] = await getPrayerStatus(prayer);
-      }
-      setTrackingStatus(status);
-    }
-    loadStatus();
+    // One read of the stored blob for all five, not five sequential ones — the
+    // checkmarks used to wait on a chain of storage round-trips.
+    getTodayStatuses(TRACKABLE_PRAYERS).then(setTrackingStatus);
   }, [prayers]);
 
   const displayPrayers = prayers.filter((p) => {

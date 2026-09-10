@@ -89,6 +89,8 @@ vi.mock('../services/prayerTrackingService', async (importOriginal) => {
     loadTrackingData: vi.fn().mockResolvedValue({ records: [] }),
     trackPrayer: vi.fn().mockResolvedValue(undefined),
     getPrayerStatus: vi.fn().mockResolvedValue('untracked'),
+    getTodayStatuses: vi.fn().mockResolvedValue({}),
+    resetTrackingCache: vi.fn(),
     getDailyRecord: vi.fn().mockResolvedValue({ date: actual.getTodayKey(), prayers: {} }),
     getRecentRecords: vi.fn().mockResolvedValue([]),
     getStats: vi.fn().mockResolvedValue({ totalTracked: 0, onTime: 0, missed: 0, percentage: 0 }),

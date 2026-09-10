@@ -8,6 +8,17 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
  */
 const SETTLE_MS = 900;
 
+// Scratch vectors for the per-frame paths below. Allocating inside the render
+// loop is steady GC pressure on a device that is already rendering WebGL on
+// battery; these are reused instead. Each is private to the one method named
+// in its comment, so nothing can alias another's value across a frame.
+/** facing() only. */
+const FACING_EYE = new THREE.Vector3();
+/** facing() only. */
+const FACING_POINT = new THREE.Vector3();
+/** normalizeSprites() only. */
+const SPRITE_WORLD = new THREE.Vector3();
+
 export interface Palette {
   primary: string;
   text: string;
@@ -271,8 +282,11 @@ export abstract class Base3D<TData = unknown> {
    * instead of showing through it.
    */
   protected facing(worldPosition: THREE.Vector3): number {
-    const eye = this.camera.position.clone().sub(this.controls.target).normalize();
-    return worldPosition.clone().sub(this.controls.target).normalize().dot(eye);
+    // Scratch vectors, not clones: subclasses call this once per marker per
+    // frame, and these views run on a phone's battery. Neither may be a vector
+    // a caller passed in, so they are private to this method.
+    const eye = FACING_EYE.copy(this.camera.position).sub(this.controls.target).normalize();
+    return FACING_POINT.copy(worldPosition).sub(this.controls.target).normalize().dot(eye);
   }
 
   /**
@@ -354,7 +368,7 @@ export abstract class Base3D<TData = unknown> {
   private normalizeSprites(): void {
     if (!this.sprites.length) return;
     const ref = this.camera.position.length() || 1;
-    const wp = new THREE.Vector3();
+    const wp = SPRITE_WORLD;
     for (const sp of this.sprites) {
       sp.getWorldPosition(wp);
       const k = this.camera.position.distanceTo(wp) / ref;

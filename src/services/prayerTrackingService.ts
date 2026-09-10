@@ -106,8 +106,26 @@ function migrateDayKeys(data: StoredTrackingData): TrackingData {
   return { records: migrated };
 }
 
-// Load all tracking data
-export async function loadTrackingData(): Promise<TrackingData> {
+/**
+ * The blob, parsed, for the rest of the session.
+ *
+ * Every read in this module used to go to native storage and re-parse: the
+ * prayer table asked five times on mount, and opening the dashboard asked
+ * twice more. The stored value only ever changes through saveTrackingData
+ * below, so the parse can happen once. A promise rather than a value, because
+ * those five reads start together and would otherwise all miss.
+ */
+let cached: Promise<TrackingData> | null = null;
+
+/**
+ * Drop the parsed blob. For tests, and for anything that ever writes this key
+ * without going through saveTrackingData.
+ */
+export function resetTrackingCache(): void {
+  cached = null;
+}
+
+async function readTrackingData(): Promise<TrackingData> {
   try {
     const { value } = await Preferences.get({ key: TRACKING_KEY });
     if (value) {
@@ -117,6 +135,14 @@ export async function loadTrackingData(): Promise<TrackingData> {
     console.error('Failed to load tracking data:', error);
   }
   return { records: [] };
+}
+
+// Load all tracking data
+export async function loadTrackingData(): Promise<TrackingData> {
+  cached ??= readTrackingData();
+  // A shallow copy: trackPrayer reassigns `records` on what it gets back, and
+  // must not be reassigning it on the cache.
+  return { records: (await cached).records };
 }
 
 // Save tracking data
@@ -129,8 +155,11 @@ async function saveTrackingData(data: TrackingData): Promise<void> {
       key: TRACKING_KEY,
       value: JSON.stringify(stored),
     });
+    cached = Promise.resolve({ records: data.records });
   } catch (error) {
     console.error('Failed to save tracking data:', error);
+    // The write failed, so the cache would be ahead of what is on disk.
+    cached = null;
   }
 }
 
@@ -178,6 +207,30 @@ export async function getPrayerStatus(
   );
   
   return record?.status || 'untracked';
+}
+
+/**
+ * Today's status for several prayers at once.
+ *
+ * The prayer table wants all five, and asking prayer by prayer meant five
+ * sequential awaits before the first checkmark could appear.
+ */
+export async function getTodayStatuses(
+  prayers: readonly PrayerName[],
+  date?: Date
+): Promise<Record<string, PrayerStatus>> {
+  const data = await loadTrackingData();
+  const dateKey = date ? getDateKey(date) : getTodayKey();
+
+  const wanted = new Set<string>(prayers);
+  const statuses: Record<string, PrayerStatus> = {};
+  for (const prayer of prayers) statuses[prayer] = 'untracked';
+  for (const record of data.records) {
+    if (record.date === dateKey && wanted.has(record.prayer)) {
+      statuses[record.prayer] = record.status;
+    }
+  }
+  return statuses;
 }
 
 // Get all records for a specific date

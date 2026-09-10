@@ -55,22 +55,28 @@ export function CitySearch({ onSelect }: CitySearchProps) {
   // data never changes, the query does.
   const index = useMemo(() => (cities ? buildCityIndex(cities) : null), [cities]);
 
+  // One pass over the 33,203 cities instead of one full scan per popular name.
+  // This list is what an empty query shows, so it was rebuilt every time the
+  // user cleared the box — sixteen linear scans of the whole dataset each time.
+  const popularCities = useMemo(() => {
+    if (!cities) return [];
+    const wanted = new Set(POPULAR_CITY_NAMES);
+    const found = new Map<string, CityEntry>();
+    for (const city of cities) {
+      if (wanted.has(city.n) && !found.has(city.n)) found.set(city.n, city);
+    }
+    // Keep the curated order, not the dataset's.
+    return POPULAR_CITY_NAMES.map((name) => found.get(name)).filter((c): c is CityEntry => !!c);
+  }, [cities]);
+
   // Filter and sort results
   const results = useMemo(() => {
     if (!cities || !index) return [];
 
-    if (!debouncedQuery) {
-      // Show popular cities
-      const popular: CityEntry[] = [];
-      for (const name of POPULAR_CITY_NAMES) {
-        const found = cities.find(c => c.n === name);
-        if (found) popular.push(found);
-      }
-      return popular;
-    }
+    if (!debouncedQuery) return popularCities;
 
     return searchCities(index, debouncedQuery);
-  }, [cities, index, debouncedQuery]);
+  }, [cities, index, debouncedQuery, popularCities]);
 
   const getCountryName = (code: string) => countries?.[code] || code;
 

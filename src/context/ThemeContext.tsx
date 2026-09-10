@@ -87,20 +87,27 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     return () => mediaQuery.removeEventListener('change', handleChange);
   }, []);
 
-  // Update prayer-based theme when times change or periodically
+  // Keep the Auto theme in step with the sky — but only while Auto is the
+  // chosen theme. Auto is the one mode that reads prayerBasedTheme, and this
+  // used to run regardless: a 60-second wake-up for the whole life of the app,
+  // 1,440 times a day, recomputing a value that System, Light, Dark, Desert,
+  // Rose, Forest and Ocean all ignore. Now nothing ticks unless the user has
+  // actually asked for Auto.
   useEffect(() => {
+    if (theme !== 'auto') return;
+
     const updatePrayerBasedTheme = () => {
       const shouldBeDark = isNightTime(fajrTime, maghribTime);
       setPrayerBasedTheme(shouldBeDark ? 'dark' : 'light');
     };
 
-    // Update immediately
+    // Immediately, so switching to Auto lands on the right side of Maghrib
+    // rather than waiting up to a minute for the first tick.
     updatePrayerBasedTheme();
 
-    // Check every minute for theme changes
     const interval = setInterval(updatePrayerBasedTheme, 60000);
     return () => clearInterval(interval);
-  }, [fajrTime, maghribTime]);
+  }, [theme, fajrTime, maghribTime]);
 
   // Apply theme to document
   useEffect(() => {
