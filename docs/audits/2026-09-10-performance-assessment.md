@@ -343,6 +343,20 @@ commit this assessment started from.
 Everything below is on one fast phone. A budget device is several times slower,
 and the ratios matter more than the absolute numbers.
 
+### A finding the device did not produce, but the owner did
+
+Twice reported from the app: the surface goes low-res when you zoom out. It
+does. The tile engine picks its level from camera altitude, a level L carries
+256 × 2^L pixels around the equator, and at the default framing of 2.5 it picked
+level 2 — a thousand pixels around the whole equator — and painted it over a
+photo worth two thousand. **The streamed mosaic was half the resolution of the
+thing it covered**, on every launch.
+
+Neither harness would have found this: it is not slow, it is just wrong, and
+both instruments here measure time. #27 fixes it. Recorded because it is the
+most user-visible thing in this whole assessment and it came from someone
+looking at the screen.
+
 ### The headless harness was wrong about where startup cost lives
 
 | Boot, blocked main thread | headless @4× | Pixel 10 Pro XL |
@@ -434,10 +448,12 @@ the provenance was wrong.
 ### Still open
 
 - The qibla overlay's WebGL context rebuild, above.
-- `fix/offline-globe-texture` (#21) is held rather than merged: it takes globe
-  boot from 245ms to 646ms on this device, all of it one 412ms `texSubImage2D`
-  of an 8192×4096 texture, and 300MB of graphics memory to 435MB. It does take
-  external requests on that screen from 16 to zero. Measurements and three ways
-  out are on the PR.
+- ~~`fix/offline-globe-texture` (#21)~~ — **resolved by #27**, which took the
+  free half of that PR (gate the tile stream on the altitude where tiles start
+  beating the bundled photo) and paired it with a 4096 photo instead of an 8192
+  one. Boot 280 → 320ms rather than 646ms, graphics memory 276 → 291MB rather
+  than 435MB, and network requests on a globe-home boot 16 → 0 either way. The
+  8192 upload was a single 412ms `texSubImage2D` on the main thread; compressed
+  textures (KTX2/Basis) are the route back to it if it is ever wanted.
 - None of this has been checked on a slow device, which is where all of it
   matters most.

@@ -58,15 +58,19 @@ open that preview.
 **3. The globe's surface imagery — Esri**
 `server.arcgisonline.com`
 
-The globe home screen paints the Earth with satellite imagery streamed from
-Esri's World Imagery service. It requests map squares, not coordinates — but
-the squares it asks for are the ones around you, because the globe opens
-pointed at your location, so **these requests reveal roughly where you are**.
-A cold start at the default zoom fetches about sixteen of them. Zooming in
-requests smaller squares, which narrows that further. Esri's privacy policy:
+**Only if you zoom in.** The globe home screen paints the Earth with a
+satellite photo that ships inside the app, and at the normal zoom nothing is
+requested at all. Zoom in past roughly a third of the way to the surface and
+the app starts streaming sharper imagery from Esri's World Imagery service.
+
+It requests map squares rather than coordinates — but the squares are the ones
+you are looking at, and the globe opens pointed at you, so **once it starts,
+these requests reveal roughly where you are**, and the further you zoom the
+more precisely. Esri's privacy policy:
 https://www.esri.com/en-us/privacy/overview
 
-Switching the home screen to the list view means this never runs.
+Two ways this never runs: leave the globe at its normal zoom, or use the list
+home view instead.
 
 **4. Athan recordings — Assabile**
 `www.assabile.com`

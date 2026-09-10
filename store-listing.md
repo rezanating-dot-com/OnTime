@@ -19,7 +19,7 @@ FEATURES
 
 - Accurate prayer times, calculated on your device, using the method you trust — ISNA, Muslim World League, Umm Al-Qura, Egyptian, Dubai, Karachi, Kuwait, Qatar, Singapore, Tehran, Turkey, or Moonsighting Committee
 - Hanafi and Shafi'i Asr calculation
-- A living globe for your home screen: real satellite imagery, the day and night sides of the Earth, and a line drawn across the world for each prayer, so you can see where in the world it is Fajr right now
+- A living globe for your home screen: real satellite imagery that works with no signal, the day and night sides of the Earth, and a line drawn across the world for each prayer, so you can see where in the world it is Fajr right now
 - Or a plain list, if that is what you want. Both light and dark, plus Desert, Rose, Forest and Ocean, and an Auto mode that turns dark at Maghrib
 - Qibla compass with a great-circle bearing to the Kaaba from anywhere
 - Prayer tracking — mark each prayer on time or missed, and see your week
@@ -42,7 +42,7 @@ Four things do reach the internet, and none of them is about you:
 
 - your coordinates go to OpenStreetMap to turn them into a city name
 - the map preview, when you open it, is loaded from OpenStreetMap
-- the globe's satellite imagery is streamed from Esri, which means those requests show roughly which part of the world you are looking at
+- the globe's satellite photo ships inside the app, so it needs no network at all until you zoom in; past that it streams sharper imagery from Esri, and those requests show roughly which part of the world you are looking at
 - athan recordings are downloaded from Assabile, only when you choose one
 
 Full detail, including how to avoid each one, is in the privacy policy.
