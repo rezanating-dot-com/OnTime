@@ -5,6 +5,7 @@ import { useSettings } from '../context/SettingsContext';
 import { useTravel } from '../context/TravelContext';
 import { KhatamStar, GirihBackground } from './IslamicPatterns';
 import type { PrayerTime, PrayerName, AllPrayerNames, TravelState } from '../types';
+import { readableInkOn } from '../utils/contrast';
 
 interface IslamicPrayerTableProps {
   prayers: PrayerTime[];
@@ -276,6 +277,11 @@ function IslamicJamaRow({ prayer, pairPrayer, isHighlighted, highlightKey, track
 
   const [g1, g2, g3] = SKY_GRADIENTS[highlightKey] || ['transparent', 'transparent', 'transparent'];
   const gradientBg = `linear-gradient(100deg, ${g1} 0%, ${g2} 55%, ${g3} 100%)`;
+  // The name rides the gradient's opening colour and the time its closing one,
+  // and the daylight skies end near-white — so a single ink cannot serve both
+  // ends of one row, let alone Fajr's night and Dhuhr's noon.
+  const nameInk = readableInkOn(g1);
+  const timeInk = readableInkOn(g3);
 
   const statusDotColor = bothOnTime ? '#7ec89b'
     : anyMissed ? 'rgba(220, 90, 70, 0.75)'
@@ -320,8 +326,8 @@ function IslamicJamaRow({ prayer, pairPrayer, isHighlighted, highlightKey, track
                   the row and orphaned the last badge onto its own line. */}
               <span className="text-[22px] leading-tight tracking-wide" style={{
                 fontFamily: '"Cormorant Garamond", serif', fontWeight: 500,
-                color: isHighlighted ? '#fff' : 'var(--color-text)',
-                textShadow: isHighlighted ? '0 1px 3px rgba(0,0,0,0.5), 0 0 6px rgba(0,0,0,0.3)' : 'none',
+                color: isHighlighted ? nameInk.strong : 'var(--color-text)',
+                textShadow: isHighlighted ? nameInk.shadow : 'none',
                 opacity: isPassed && !isHighlighted ? 0.55 : 1,
               }}>{prayer.label} + {pairPrayer.label}</span>
               <span className="text-xs font-medium px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-600 whitespace-nowrap">
@@ -333,9 +339,9 @@ function IslamicJamaRow({ prayer, pairPrayer, isHighlighted, highlightKey, track
               fontFamily: '"JetBrains Mono", ui-monospace, monospace',
               fontSize: 13, fontWeight: 400, letterSpacing: 0.3,
               fontVariantNumeric: 'tabular-nums', minWidth: 62,
-              color: isHighlighted ? '#fff' : 'var(--color-text)',
+              color: isHighlighted ? timeInk.strong : 'var(--color-text)',
               opacity: isPassed && !isHighlighted ? 0.6 : isHighlighted ? 1 : 0.85,
-              textShadow: isHighlighted ? '0 1px 3px rgba(0,0,0,0.5), 0 0 6px rgba(0,0,0,0.3)' : 'none',
+              textShadow: isHighlighted ? timeInk.shadow : 'none',
             }}>
               {/* One meridiem for the pair — see PrayerTable's jama row. */}
               {startParts ? startParts[1] : startFmt}
@@ -405,6 +411,11 @@ function IslamicPrayerRow({ prayer, isHighlighted, isSelected, trackingStatus, o
 
   const [g1, g2, g3] = SKY_GRADIENTS[prayer.name];
   const gradientBg = `linear-gradient(100deg, ${g1} 0%, ${g2} 55%, ${g3} 100%)`;
+  // The name rides the gradient's opening colour and the time its closing one,
+  // and the daylight skies end near-white — so a single ink cannot serve both
+  // ends of one row, let alone Fajr's night and Dhuhr's noon.
+  const nameInk = readableInkOn(g1);
+  const timeInk = readableInkOn(g3);
 
   const isTrackable = TRACKABLE_PRAYERS.includes(prayer.name as PrayerName);
   const isPassed = prayer.time <= new Date();
@@ -476,8 +487,8 @@ function IslamicPrayerRow({ prayer, isHighlighted, isSelected, trackingStatus, o
           <div onClick={handleNameTap} className="min-w-0 flex items-baseline gap-2 cursor-pointer" style={{ whiteSpace: 'nowrap', overflow: 'hidden' }}>
             <span className="text-[22px] leading-tight tracking-wide" style={{
               fontFamily: '"Cormorant Garamond", serif', fontWeight: 500,
-              color: isHighlighted ? '#fff' : 'var(--color-text)',
-              textShadow: isHighlighted ? '0 1px 3px rgba(0,0,0,0.5), 0 0 6px rgba(0,0,0,0.3)' : 'none',
+              color: isHighlighted ? nameInk.strong : 'var(--color-text)',
+              textShadow: isHighlighted ? nameInk.shadow : 'none',
               opacity: isPassed && !isHighlighted ? 0.55 : 1,
             }}>
               {prayer.label}
@@ -485,9 +496,9 @@ function IslamicPrayerRow({ prayer, isHighlighted, isSelected, trackingStatus, o
             {arabic && (
               <span className="text-[13px]" style={{
                 fontFamily: '"Amiri", serif',
-                color: isHighlighted ? 'rgba(255,255,255,0.85)' : 'var(--color-primary)',
+                color: isHighlighted ? nameInk.soft : 'var(--color-primary)',
                 opacity: isHighlighted ? 0.9 : 0.55,
-                textShadow: isHighlighted ? '0 1px 3px rgba(0,0,0,0.5)' : 'none',
+                textShadow: isHighlighted ? nameInk.shadow : 'none',
               }}>
                 {arabic}
               </span>
@@ -501,7 +512,7 @@ function IslamicPrayerRow({ prayer, isHighlighted, isSelected, trackingStatus, o
           <div onClick={handleTimeTap} className="cursor-pointer">
             {showTrackingPrompt ? (
               <div className="flex items-center gap-1.5" style={{ animation: 'islamic-slide-down 0.22s ease-out' }}>
-                <span className="text-xs cursor-pointer" style={{ color: isHighlighted ? 'rgba(255,255,255,0.9)' : 'var(--color-text)' }}
+                <span className="text-xs cursor-pointer" style={{ color: isHighlighted ? timeInk.soft : 'var(--color-text)' }}
                   onClick={(e) => { e.stopPropagation(); setShowTrackingPrompt(false); }}>
                   On time?
                 </span>
@@ -519,7 +530,7 @@ function IslamicPrayerRow({ prayer, isHighlighted, isSelected, trackingStatus, o
             ) : isSelected && countdown ? (
               <span className="text-[13px] font-medium" style={{
                 fontFamily: '"JetBrains Mono", ui-monospace, monospace',
-                color: isHighlighted ? '#fff' : countdown === 'Passed' ? '#e88a76' : 'var(--color-primary)',
+                color: isHighlighted ? timeInk.strong : countdown === 'Passed' ? '#e88a76' : 'var(--color-primary)',
                 animation: 'islamic-slide-down 0.22s ease-out',
               }}>
                 {countdown}
@@ -529,9 +540,9 @@ function IslamicPrayerRow({ prayer, isHighlighted, isSelected, trackingStatus, o
                 fontFamily: '"JetBrains Mono", ui-monospace, monospace',
                 fontSize: 13, fontWeight: 400, letterSpacing: 0.3,
                 fontVariantNumeric: 'tabular-nums', minWidth: 62,
-                color: isHighlighted ? '#fff' : 'var(--color-text)',
+                color: isHighlighted ? timeInk.strong : 'var(--color-text)',
                 opacity: isPassed && !isHighlighted ? 0.6 : isHighlighted ? 1 : 0.85,
-                textShadow: isHighlighted ? '0 1px 3px rgba(0,0,0,0.5), 0 0 6px rgba(0,0,0,0.3)' : 'none',
+                textShadow: isHighlighted ? timeInk.shadow : 'none',
               }}>
                 {time}<span className="text-[10px] ml-0.5 uppercase">{period}</span>
               </div>
