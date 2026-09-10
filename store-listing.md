@@ -57,7 +57,7 @@ prayer times, salah, islamic, muslim, qibla, adhan, prayer tracker, ramadan, ath
 
 ## Assets
 
-- **Phone screenshots** — `docs/store/2026-09-10/`, six at 1080×1920. Regenerate with `scripts/store-screenshots.mjs`.
+- **Phone screenshots** — `docs/store/2026-09-10/`, eight at 1080×1920: globe, prayer list, Qibla, tracking, travel mode in use, notifications, per-prayer reminders, settings. Regenerate with `scripts/store-screenshots.mjs`; the README beside them says why each is in the set.
 - **Feature graphic** — 1024×500. **Not done.** Has to be designed; it cannot be screenshotted.
 - **Tablet screenshots** — only needed if the listing claims tablet support.
 
