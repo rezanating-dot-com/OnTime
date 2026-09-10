@@ -357,18 +357,36 @@ both instruments here measure time. #27 fixes it. Recorded because it is the
 most user-visible thing in this whole assessment and it came from someone
 looking at the screen.
 
-### The headless harness was wrong about where startup cost lives
+### The headless harness overstated the globe, but was right about it
+
+**This section replaces an earlier version of itself that was wrong.** The
+first pass reported the globe and the list costing the same on device and
+concluded that §1's headline was an artefact. That conclusion came from a
+broken instrument: the harness seeded the home view by writing
+`CapacitorStorage.ontime_settings` into `localStorage`, which works in a
+browser and does nothing at all on Android, where Capacitor Preferences is
+SharedPreferences. Every "list home" run on the phone was the globe measured
+against itself. The seed now goes through the app's own view toggle, which
+persists the way a tap does.
+
+With that fixed, on the same device in one session:
 
 | Boot, blocked main thread | headless @4× | Pixel 10 Pro XL |
 |---|---|---|
-| List home | 0ms | **~270ms** (n=3, 248–303) |
-| Globe home | 1243ms in 12 tasks | **~246ms** (n=4, 229–256) |
+| List home | 0ms | **~82ms** (n=3, 66–93) |
+| Globe home, before the surface fix | 1243ms in 12 tasks | **~275ms** (n=4, 252–292) |
+| Globe home, current | — | **~359ms** (n=4, 329–417) |
 
-**The globe and the list cost the same on real hardware.** §1's headline — that
-every startup cost in this app belongs to the globe — is an artefact of
-SwiftShader, and it is wrong. The globe's extra second in headless was software
-rasterisation, exactly as §1's own caveat warned might be the case; the caveat
-was right and the conclusion drawn next to it was not.
+So §1's headline stands after all: the globe is where the startup cost lives,
+at three to four times the list view. What headless got wrong was the size —
+it put the globe's excess over the list at 1243ms where the device says about
+195ms, an exaggeration of roughly six times. **The caveat in §1 was right, the
+correction in the first draft of §8 was wrong, and the original conclusion was
+right for the wrong confidence.**
+
+The lesson worth keeping is not "headless lies" but "a seeding step that
+silently no-ops produces confident numbers about the wrong thing". The seed
+never errored. It just wrote to a store nothing read.
 
 What the ~250ms actually is, from a CPU profile over the boot:
 
@@ -451,9 +469,11 @@ the provenance was wrong.
 - ~~`fix/offline-globe-texture` (#21)~~ — **resolved by #27**, which took the
   free half of that PR (gate the tile stream on the altitude where tiles start
   beating the bundled photo) and paired it with a 4096 photo instead of an 8192
-  one. Boot 280 → 320ms rather than 646ms, graphics memory 276 → 291MB rather
+  one. Boot 275 → 359ms rather than 646ms, graphics memory 276 → 291MB rather
   than 435MB, and network requests on a globe-home boot 16 → 0 either way. The
   8192 upload was a single 412ms `texSubImage2D` on the main thread; compressed
   textures (KTX2/Basis) are the route back to it if it is ever wanted.
+  #27 was opened quoting 280 → 320ms, measured across two sessions; the
+  same-session A/B in this section puts the real cost at **+84ms**, not +40ms.
 - None of this has been checked on a slow device, which is where all of it
   matters most.
