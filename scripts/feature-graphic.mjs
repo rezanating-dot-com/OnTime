@@ -2,43 +2,96 @@
 /**
  * Render the Play Store feature graphic.
  *
+ *   npm run build
+ *   npx vite preview --port 5199 --strictPort   # in another shell
  *   node scripts/feature-graphic.mjs docs/store/<date>
  *
  * ── What this is ─────────────────────────────────────────────────────
  *
  * The wide banner Play shows above the screenshots, at exactly 1024x500. It
  * cannot be a screenshot: Play wants a designed image, and a phone screen at
- * this shape is mostly empty. So the globe is lifted out of the first store
- * screenshot and set against the app's own night sky with the name beside it.
+ * this shape is mostly empty. So the app's own globe is photographed on its
+ * own, against the app's own night sky, with the name beside it.
  *
- * Taking the globe from the screenshot rather than re-rendering it means the
- * banner can never show something the app does not: it is the same frame a
- * user would see, with the prayer lines, the day and night sides, and the pin.
- * Regenerate the screenshots first if the globe has changed.
+ * ── Why it drives the app rather than cropping a screenshot ──────────
  *
- * ── Finding the planet ───────────────────────────────────────────────
+ * The first version cut the planet out of 01-globe-home.png and hunted for it
+ * by looking for the widest run of lit pixels. That is unreliable for a reason
+ * worth writing down: half the planet is in night and reads darker than the
+ * sky beside it, while the countdown and the prayer labels read brighter than
+ * either. "The widest lit row" then lands somewhere that is neither the
+ * equator nor anything else in particular, and the banner came out with the
+ * planet sitting high. No threshold fixes that; the method was wrong.
  *
- * The crop is measured, not hard-coded: the widest run of non-space pixels in
- * the screenshot gives the disc's centre and radius, and the square cut around
- * it is the radius plus a tenth, so the prayer-line labels that sit just off
- * the limb survive. Hard-coded numbers would silently mis-frame the moment the
- * globe shot is retaken at a different zoom.
+ * Here the app draws the globe into a square window with its own chrome
+ * hidden. The camera points at the user's location, so the planet is centred
+ * by construction rather than by search, and the only thing in frame that is
+ * not sky is the planet — which makes measuring its radius exact.
  *
- * The soft edge on the planet is a mask. Note the number: a circular gradient
- * measures its stops along the ray to the farthest *corner*, so the rim sits
- * near 68% of it, not near 50%. Getting that wrong slices the Earth in half.
+ * ── The mask ─────────────────────────────────────────────────────────
+ *
+ * Both of its numbers sit somewhere you would not guess. A circular CSS
+ * gradient measures its stops along the ray to the farthest CORNER, so a rim
+ * five sixths of the way to the edge is at 59% of that ray, not 83%. And the
+ * fade has to finish before 70.7%, where the ray crosses the nearest edge:
+ * past it the square's own sides show through as four flats on a sphere.
  */
 
 import { chromium } from '/home/rinux/Desktop/Projects/Development Project/logicly/node_modules/playwright-core/index.mjs';
-import { readFileSync, mkdirSync } from 'fs';
+import { mkdirSync } from 'fs';
 import { join } from 'path';
 
 const OUT_DIR = process.argv[2] ?? 'store-shots';
-const SOURCE = join(OUT_DIR, '01-globe-home.png');
 mkdirSync(OUT_DIR, { recursive: true });
 
-const globeShot = readFileSync(SOURCE).toString('base64');
+/** Mecca near sunrise, so the day and night sides are both in shot. */
+const MECCA = { latitude: 21.4225, longitude: 39.8262 };
+const SHOT = 900;
+/** How wide the planet itself should be on the finished banner. */
+const PLANET_PX = 430;
 
+const browser = await chromium.launch({
+  args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'],
+});
+
+// ── 1. photograph the globe on its own ───────────────────────────────
+const globeCtx = await browser.newContext({
+  viewport: { width: SHOT, height: SHOT },
+  deviceScaleFactor: 1,
+  timezoneId: 'Asia/Riyadh',
+  locale: 'en-US',
+  colorScheme: 'dark',
+});
+await globeCtx.addInitScript((loc) => {
+  const set = (k, v) => localStorage.setItem(`CapacitorStorage.${k}`, v);
+  set('ontime_onboarding_complete', 'true');
+  set('ontime_theme', 'dark');
+  set('ontime_location', JSON.stringify({ coordinates: loc, cityName: 'Mecca', countryCode: 'SA' }));
+  set('ontime_settings', JSON.stringify({
+    calculationMethod: 'UmmAlQura', asrCalculation: 'Standard',
+    optionalPrayers: { showSunrise: true, showMiddleOfNight: false, showLastThirdOfNight: false },
+    distanceUnit: 'miles', designStyle: 'classic', homeView: 'globe',
+  }));
+}, MECCA);
+
+const globePage = await globeCtx.newPage();
+await globePage.goto('http://localhost:5199/', { waitUntil: 'load' });
+// The globe is its own layer behind everything else, so everything else can
+// simply be told not to draw. Anything left in frame would be measured as
+// part of the planet.
+await globePage.addStyleTag({
+  content: `
+    header, button { display: none !important; }
+    .absolute.inset-x-0.bottom-1 { display: none !important; }
+    .pointer-events-none.absolute.inset-x-0.top-0 { display: none !important; }
+    .px-4.pb-6, .px-5.pb-6 { display: none !important; }
+  `,
+});
+await globePage.waitForTimeout(12000);
+const globeShot = (await globePage.screenshot()).toString('base64');
+await globeCtx.close();
+
+// ── 2. compose the banner around it ──────────────────────────────────
 const PAGE = `
 <meta charset="utf-8">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -48,32 +101,18 @@ const PAGE = `
   html, body { width: 1024px; height: 500px; overflow: hidden; }
   body {
     font-family: 'Ubuntu', system-ui, sans-serif;
-    /* Lit behind the words, then settled onto exactly the sky the screenshot
-       was taken against — #03050a — well before the planet starts.
-       The cut-out carries that sky in the gap between the planet's rim and the
-       labels sitting just off it, and its own atmosphere halo just outside the
-       rim. Put either against a different black and you get a ring around the
-       Earth; this is the whole reason the right half of this is flat. */
+    /* Lit behind the words, then settled onto the same near-black the globe
+       was photographed against, well before the planet starts. The cut-out
+       carries that sky in the gap between the rim and its own atmosphere, and
+       against a different black that gap reads as a ring round the Earth. */
     background: linear-gradient(101deg, #0c1426 0%, #070c17 33%, #03050a 52%, #03050a 100%);
     position: relative;
   }
   .stars { position: absolute; inset: 0; }
   .stars i { position: absolute; border-radius: 50%; background: #fff; }
-  /* No halo of our own. The globe brings the app's own atmosphere with it in
-     the cut-out, and a second one drawn underneath only shows up as a ring. */
-  #globe {
-    position: absolute; right: 24px; top: 50%; transform: translateY(-50%);
-    width: 492px; height: 492px;
-    /* Two numbers that both have to be right, and neither is where you would
-       guess. A circle gradient measures its stops along the ray to the
-       farthest CORNER, so with a fifth of a radius of air around the planet
-       its rim lands near 59% of the ray, not near 50%. And the fade has to
-       FINISH before 70.7%, which is where the ray crosses the nearest edge:
-       past that the square's own sides show through as four flats on what is
-       supposed to be a sphere. Start after the rim, end before the edge. */
-    -webkit-mask-image: radial-gradient(circle at 50% 50%, #000 0 64%, transparent 69.5%);
-    mask-image: radial-gradient(circle at 50% 50%, #000 0 64%, transparent 69.5%);
-  }
+  /* No halo of our own: the globe brings the app's own atmosphere with it, and
+     a second one drawn underneath only shows up as a ring. */
+  #globe { position: absolute; }
   .copy { position: absolute; left: 68px; top: 50%; transform: translateY(-50%); width: 500px; }
   .name {
     font-size: 88px; font-weight: 700; letter-spacing: -2px; line-height: 1;
@@ -93,7 +132,7 @@ const PAGE = `
   }
 </style>
 <div class="stars" id="stars"></div>
-<canvas id="globe" width="900" height="900"></canvas>
+<canvas id="globe"></canvas>
 <div class="copy">
   <div class="name">OnTime</div>
   <div class="rule"></div>
@@ -115,57 +154,70 @@ const PAGE = `
     host.appendChild(s);
   }
 
-  /** Cut the planet out of a store screenshot, measured rather than guessed. */
-  window.__placeGlobe = (dataUrl) => new Promise((resolve) => {
+  /**
+   * Place the planet. The shot is square and the camera is aimed at the user's
+   * own place, so the centre is the centre; only the radius has to be
+   * measured, and with nothing in frame but sky that is a matter of walking in
+   * from the edge until the sky stops.
+   */
+  window.__placeGlobe = (dataUrl, planetPx) => new Promise((resolve) => {
     const img = new Image();
     img.onload = () => {
+      const n = img.width;
       const probe = document.createElement('canvas');
-      probe.width = img.width; probe.height = img.height;
+      probe.width = probe.height = n;
       const pc = probe.getContext('2d', { willReadFrequently: true });
       pc.drawImage(img, 0, 0);
-      const { data } = pc.getImageData(0, 0, img.width, img.height);
-      const lum = (i) => 0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2];
-
-      // Space is near black; anything brighter is either the planet or the
-      // app's own text. Only rows well below the countdown and above the
-      // controls are considered, and the widest of them is the equator of the
-      // disc as drawn.
-      const top = Math.round(img.height * 0.22);
-      const bottom = Math.round(img.height * 0.84);
-      let best = { width: 0 };
-      for (let y = top; y < bottom; y++) {
-        let lo = -1, hi = -1;
-        for (let x = 0; x < img.width; x++) {
-          if (lum((y * img.width + x) * 4) > 12) { if (lo < 0) lo = x; hi = x; }
-        }
-        if (hi - lo > best.width) best = { y, lo, hi, width: hi - lo };
+      const { data } = pc.getImageData(0, 0, n, n);
+      const lum = (x, y) => {
+        const i = (y * n + x) * 4;
+        return 0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2];
+      };
+      // Along the horizontal through the centre, on the lit side, which is
+      // unmistakable against the sky.
+      const mid = Math.floor(n / 2);
+      let r = 0;
+      for (let x = n - 1; x > mid; x--) {
+        if (lum(x, mid) > 26) { r = x - mid; break; }
       }
-      const r = best.width / 2;
-      const cx = (best.lo + best.hi) / 2;
-      // A fifth of a radius of air. The labels that sit just off the limb have
-      // to be inside the cut AND inside the mask's fade, and the fade has to
-      // finish before the square's own edge — which only leaves room if the
-      // planet is comfortably smaller than the cut.
-      const pad = Math.round(r * 1.2);
+      if (!r) throw new Error('no planet in the frame');
 
-      const out = document.getElementById('globe').getContext('2d');
-      out.drawImage(img, cx - pad, best.y - pad, pad * 2, pad * 2, 0, 0, 900, 900);
-      resolve({ cx: Math.round(cx), cy: best.y, r: Math.round(r) });
+      // A third of a radius of air around it. Enough for the atmosphere AND
+      // for the prayer labels, which sit just off the limb: with less, the
+      // fade starts on top of them and clips a word off the left of one.
+      const pad = Math.round(r * 1.35);
+      const box = pad * 2;
+      const el = document.getElementById('globe');
+      el.width = el.height = box;
+      el.getContext('2d').drawImage(img, mid - pad, mid - pad, box, box, 0, 0, box, box);
+
+      // Sized so the planet itself is the width asked for, and centred on the
+      // banner's own middle — which is the point of photographing it alone.
+      const shown = planetPx * 1.35;
+      el.style.width = el.style.height = shown + 'px';
+      el.style.left = (1024 - 36 - shown) + 'px';
+      el.style.top = (250 - shown / 2) + 'px';
+      // The rim is now at 1/1.35 of the half-box, which is 52% of the ray to
+      // the corner, and the labels reach a few per cent past it. Start after
+      // them, finish before 70.7%, where the ray leaves the nearest edge.
+      const mask = 'radial-gradient(circle at 50% 50%, #000 0 59%, transparent 68%)';
+      el.style.webkitMaskImage = mask;
+      el.style.maskImage = mask;
+      resolve({ radius: r, of: n });
     };
     img.src = dataUrl;
   });
 </script>
 `;
 
-const browser = await chromium.launch();
 const ctx = await browser.newContext({ viewport: { width: 1024, height: 500 }, deviceScaleFactor: 1 });
 const page = await ctx.newPage();
 await page.setContent(PAGE, { waitUntil: 'networkidle' });
 const found = await page.evaluate(
-  (b64) => window.__placeGlobe('data:image/png;base64,' + b64),
-  globeShot
+  ([b64, px]) => window.__placeGlobe('data:image/png;base64,' + b64, px),
+  [globeShot, PLANET_PX]
 );
-console.log(`globe found at (${found.cx}, ${found.cy}) radius ${found.r} in ${SOURCE}`);
+console.log(`planet measured at radius ${found.radius} in a ${found.of}px frame`);
 await page.waitForTimeout(600);
 const out = join(OUT_DIR, 'feature-graphic.png');
 await page.screenshot({ path: out });
