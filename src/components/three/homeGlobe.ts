@@ -34,13 +34,19 @@ export interface HomeGlobeData {
   qiblaMode?: boolean;
   /** Device compass heading, degrees clockwise from true north (null = none). */
   deviceHeading?: number | null;
+  /** True once the magnetometer reading can be trusted. Until then the marker
+   *  stays a plain dot: an arrow pointing at noise is worse than no arrow. */
+  headingCalibrated?: boolean;
   /** Bearing to the Kaaba, degrees clockwise from true north. */
   qiblaDirection?: number;
 }
 
 // All distances are in globe-radius units (globe.gl uses a 100-unit globe).
 export const GLOBE_RADIUS = 100;
-const HOME_ALTITUDE = 2.5; // default framing
+/** Default framing: the whole planet in the frame with sky around it, rather
+ *  than an Earth that runs off all four edges. Set from a measurement of the
+ *  view the app's owner pinched to and asked for. */
+const HOME_ALTITUDE = 4.4;
 const FOCUS_ALTITUDE = 0.5; // "My location" fly-in
 const MIN_ALTITUDE = 0.06; // pinch floor, just above the atmosphere
 const MAX_DISTANCE = 3500;
@@ -209,24 +215,38 @@ const GROUND_LINE_WIDTH_PX = 6;
 /** The 3D Kaaba endpoint, raised and scaled so it reads as a landmark. */
 const KAABA_ALTITUDE = 0.05;
 const KAABA_SCALE = 2.2;
-/** The same Kaaba seen from orbit rather than from the ground beside it. At
- *  the ground-view scale it is a speck a few pixels across. */
-const KAABA_ORBIT_SCALE = 9;
 /**
- * How far up the screen the ends of the line are allowed to reach, as a
- * fraction of the distance from the middle to the edge. Kept well short of 1:
- * the countdown sits over the top of the globe and the compass guidance over
- * the bottom, and an end tucked behind either of those is an end you cannot
- * see. Leaving the margin in degrees of the Earth's surface instead does
- * almost nothing, because a point that far round is already near the limb and
- * its position on screen barely moves.
+ * How much of each new compass reading to take. Applied once per reading, so
+ * it settles in a handful of readings whatever the frame rate — the arrow used
+ * to advance this on every drawn frame, which at 90 a second converged inside a
+ * twentieth of a second and smoothed nothing.
  */
-const QIBLA_FRAME_FILL = 0.65;
-/** Never closer than this, or a short line fills the screen and reads as a map. */
-const QIBLA_MIN_FRAME_ALTITUDE = 1;
-/** Never further than this, or the globe is a marble and the line is a hair. */
-const QIBLA_MAX_FRAME_ALTITUDE = 3.2;
+const HEADING_SMOOTHING = 0.22;
+
+/** How far down the frame the planet sits, as a fraction of the window height.
+ *  A fraction rather than a count of points, so a tall screen and a short one
+ *  put the same proportion of sky above the planet. On a phone about eleven
+ *  hundred points tall this is a little over fifty of them, which is what it
+ *  takes to clear the line about the prayer that has just been. */
+const GLOBE_VIEW_DROP = 0.05;
+
+/** Below this much movement between readings, treat the phone as held still. */
+const HEADING_STILL_DEG = 0.15;
+
+/** On-screen height of the Kaaba pin, held constant at every zoom. */
+const KAABA_PIN_PX = 80;
+
 const GROUND_FLY_DURATION_MS = 900;
+
+/** How long the horizon takes to swing round when the qibla comes up. Short
+ *  enough not to be a wait, long enough that the eye follows it rather than
+ *  finding the world already somewhere else. */
+const HORIZON_TURN_MS = 520;
+
+/** What the sun's lines are worth while the qibla is up. Not hidden — they are
+ *  the reason this globe exists — but taken back far enough that the one line
+ *  being asked about is the one the eye lands on. */
+const QIBLA_OTHER_LINE_OPACITY = 0.18;
 /** Ground camera looks slightly down (tan of the pitch angle, ~12°). */
 const GROUND_PITCH = 0.21;
 /** Sun angular distance from the sub-solar point for each solar event.
@@ -274,15 +294,6 @@ export function geo2xyz(lat: number, lon: number, r: number): { x: number; y: nu
   const theta = (90 - lon) * D2R;
   const s = Math.sin(phi);
   return { x: r * s * Math.cos(theta), y: r * Math.cos(phi), z: r * s * Math.sin(theta) };
-}
-
-/** The inverse of geo2xyz, for a vector that is already a unit vector.
- *  Longitude comes back in the usual -180..180, not the 0..360 the raw
- *  arithmetic gives. */
-function xyz2geo(v: THREE.Vector3): { lat: number; lon: number } {
-  const phi = Math.acos(Math.min(1, Math.max(-1, v.y)));
-  const theta = Math.atan2(v.z, v.x);
-  return { lat: 90 - phi / D2R, lon: ((90 - theta / D2R + 540) % 360) - 180 };
 }
 
 /**
@@ -478,6 +489,101 @@ function buildKaabaModel(): THREE.Group {
   return g;
 }
 
+/**
+ * The Kaaba at the far end of the line, as a map pin rather than as the little
+ * black cube it used to be.
+ *
+ * The cube was the right shape and the wrong colour: a black building against
+ * the black of space, at the size a whole planet leaves it, is a smudge you
+ * have to look for. A white pin carries it instead, which is a shape the eye
+ * already reads as "the place", and inside it the Kaaba can keep its own
+ * colours — the dark kiswah and the gold of the band and the door — because it
+ * now has something pale behind it.
+ *
+ * Drawn in isometric, matching the icon in the header exactly, so the button
+ * you press and the thing that appears are recognisably the same object.
+ */
+function kaabaPinTexture(): THREE.Texture {
+  const size = 256;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext('2d')!;
+
+  const cx = 128;
+  const cy = 94;
+  const r = 70;
+  const tipY = 244;
+
+  // The map pin every map draws: a circle, and the two straight lines that run
+  // from the point to where they just touch it. Curving those sides instead
+  // swells the shape into a lobe — it has to be the tangent or it is not the
+  // shape people already know.
+  //
+  // From a point d away from the centre of a circle of radius r, the touching
+  // points sit acos(r / d) either side of the line joining them. Sweep the
+  // long way round, over the top, so the two straight sides are what is left.
+  const d = tipY - cy;
+  const spread = Math.acos(r / d);
+  const down = Math.PI / 2;
+  ctx.beginPath();
+  ctx.moveTo(cx, tipY);
+  ctx.arc(cx, cy, r, down + spread, down - spread + Math.PI * 2);
+  ctx.closePath();
+  ctx.fillStyle = '#ffffff';
+  ctx.fill();
+  // A thin dark edge, so the pin keeps its shape over a bright coastline.
+  ctx.lineWidth = 4;
+  ctx.lineJoin = 'round';
+  ctx.strokeStyle = '#132033';
+  ctx.stroke();
+
+  // The Kaaba, in the header icon's own geometry: a 24-unit box, scaled to sit
+  // inside the pin's head.
+  // Nearly twice what it was. The Kaaba is the thing being pointed at, and at
+  // the old size the pin was mostly white with a token in it. Its silhouette
+  // is a hexagon whose furthest corner is about 0.42 of the box away from the
+  // middle, so a box this wide clears the head's edge by a few points and no
+  // more, which is the whole margin there is to spend.
+  const box = 146;
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.scale(box / 24, box / 24);
+  ctx.translate(-12, -12.1);
+  const face = (path: number[][], fill: string) => {
+    ctx.beginPath();
+    ctx.moveTo(path[0][0], path[0][1]);
+    for (const [x, y] of path.slice(1)) ctx.lineTo(x, y);
+    ctx.closePath();
+    ctx.fillStyle = fill;
+    ctx.fill();
+  };
+  // Top face, then the two sides: three weights of the kiswah's black, so the
+  // cube reads as a cube and not as a blob.
+  face([[12, 2.6], [20.8, 7.4], [12, 12.2], [3.2, 7.4]], '#3b3b44');
+  face([[3.2, 7.4], [12, 12.2], [12, 21.6], [3.2, 16.8]], '#141418');
+  face([[20.8, 7.4], [12, 12.2], [12, 21.6], [20.8, 16.8]], '#212128');
+  // The opening in the top face.
+  face([[12, 5.2], [15.9, 7.4], [12, 9.6], [8.1, 7.4]], '#0a0a0d');
+  // The band and the door, in gold. The header icon cuts these out instead,
+  // because at twenty pixels on a text-coloured glyph a shade is invisible and
+  // a gap is not. Here there is colour to spend, so they are painted.
+  face([[3.2, 9.6], [12, 14.4], [12, 15.7], [3.2, 10.9]], '#C8954C');
+  face([[20.8, 9.6], [12, 14.4], [12, 15.7], [20.8, 10.9]], '#D4A85F');
+  face([[13.8, 15.6], [15.9, 14.5], [15.9, 19.4], [13.8, 20.6]], '#C8954C');
+  ctx.restore();
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+/**
+ * How far the pin's point sits below the middle of its own picture, as a
+ * fraction of the picture's height. A sprite is placed by its centre, so this
+ * is what lifts the pin until its point rests on the surface.
+ */
+const KAABA_PIN_TIP_OFFSET = (244 - 128) / 256;
+
 /** A small "you are here" marker: blue dot with a thin white ring. */
 function locationMarkerTexture(): THREE.Texture {
   const size = 128;
@@ -492,6 +598,36 @@ function locationMarkerTexture(): THREE.Texture {
   ctx.fillStyle = PIN_COLOR;
   ctx.beginPath();
   ctx.arc(r, r, r - 18, 0, Math.PI * 2);
+  ctx.fill();
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+/**
+ * The location marker as a facing arrow, pointing up the sprite.
+ *
+ * Drawn rather than shipped so it can take the marker's own colour, and cut
+ * with a notch at the back so which end is the point survives being 50 pixels
+ * across on a bright coastline.
+ */
+function headingArrowTexture(): THREE.Texture {
+  const size = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext('2d')!;
+  ctx.beginPath();
+  ctx.moveTo(64, 10);
+  ctx.lineTo(112, 112);
+  ctx.lineTo(64, 86);
+  ctx.lineTo(16, 112);
+  ctx.closePath();
+  // White first and fat, so the shape keeps an outline over land or sea.
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = 14;
+  ctx.strokeStyle = '#ffffff';
+  ctx.stroke();
+  ctx.fillStyle = PIN_COLOR;
   ctx.fill();
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
@@ -594,9 +730,10 @@ export class HomeGlobe {
   private prayerLineMaterials: LineMaterial[] = [];
   private inGroundMode = false;
   private inQiblaMode = false;
-  /** Where the camera was before the qibla took it somewhere else. */
-  private povBeforeQibla: { lat: number; lng: number; altitude: number } | null = null;
-  private adjustedBeforeQibla = false;
+  /** True while the sun's lines are faded back behind the qibla's own. */
+  private linesFaded = false;
+  /** The horizon mid-swing, between one up vector and another. */
+  private upTurn: { start: number; from: THREE.Vector3; to: THREE.Vector3; axis: THREE.Vector3; angle: number } | null = null;
   /** Low-pass filtered compass heading (deg) to damp jitter. */
   private smoothHeading = -1;
   private groundFlyAnim: { start: number; from: THREE.Vector3; to: THREE.Vector3 } | null = null;
@@ -773,6 +910,21 @@ export class HomeGlobe {
   update(data: HomeGlobeData): void {
     this.data = data;
     if (!this.ready) return;
+    this.setMarkerArrow(!!data.qiblaMode && !!data.headingCalibrated && !data.groundMode);
+    // The arrow is drawn from the compass, and a heading is deliberately not
+    // one of the things that counts as the scene having changed below — the
+    // sun and the prayer lines do not move for it. But the arrow does, and the
+    // loop is parked whenever nothing else is moving, so a reading that turned
+    // the phone has to ask for a frame of its own. Without this the arrow
+    // sticks while the guidance under it goes on updating and the phone goes
+    // on buzzing, which is exactly how it looked.
+    //
+    // Only while it is actually turning: the filter above eases towards every
+    // reading forever, so asking on any change at all would hold the loop open
+    // for the life of the screen. The ground camera answers this the same way.
+    if (this.showingArrow && this.advanceArrowHeading(data.deviceHeading ?? 0)) {
+      this.renderThenSettle();
+    }
     const wantQibla = !!data.qiblaMode && !data.groundMode;
     if (wantQibla !== this.inQiblaMode) {
       if (wantQibla) this.enterQiblaMode();
@@ -982,6 +1134,7 @@ export class HomeGlobe {
    *  cached copy of that axis is put back too, or the picture comes upright
    *  while a drag stays rolled. */
   private resetOrbit(): void {
+    this.upTurn = null;
     this.setCameraUp(WORLD_UP);
     this.globe.controls().target.set(0, 0, 0);
   }
@@ -1072,16 +1225,9 @@ export class HomeGlobe {
    */
   private enterQiblaMode(): void {
     this.inQiblaMode = true;
-    // Read off the camera rather than asked of pointOfView, which lags its own
-    // transition. Someone who had turned the globe to look at Japan should get
-    // Japan back, not be dropped on their own city.
-    const cam = this.globe.camera() as THREE.PerspectiveCamera;
-    const here = cam.position.clone();
-    const altitude = here.length() / GLOBE_RADIUS - 1;
-    const geo = xyz2geo(here.normalize());
-    this.povBeforeQibla = { lat: geo.lat, lng: geo.lon, altitude };
-    this.adjustedBeforeQibla = this.adjusted;
-    this.buildGroundLine(KAABA_ORBIT_SCALE);
+    this.linesFaded = true;
+    this.applyLineFade();
+    this.buildGroundLine(true);
     this.groundGroup.visible = true;
     this.frameQiblaLine();
     this.renderThenSettle();
@@ -1089,15 +1235,14 @@ export class HomeGlobe {
 
   private exitQiblaMode(): void {
     this.inQiblaMode = false;
+    this.linesFaded = false;
+    this.applyLineFade();
     this.groundGroup.visible = false;
     this.clearGroundLine();
-    // Put the horizon back the way the rest of the globe expects it.
-    this.setCameraUp(WORLD_UP);
-    // Back where they were before, rather than parked over the middle of an
-    // arc that is no longer drawn.
-    this.globe.pointOfView({ ...(this.povBeforeQibla ?? this.homePov) }, 700);
-    this.markAdjusted(this.povBeforeQibla ? this.adjustedBeforeQibla : false);
-    this.povBeforeQibla = null;
+    // Put the horizon back the way the rest of the globe expects it, and
+    // nothing else: nothing moved on the way in, so nothing moves on the way
+    // out either. Swung back rather than cut back, the same as it came.
+    this.setCameraUp(WORLD_UP, HORIZON_TURN_MS);
     this.renderThenSettle();
   }
 
@@ -1115,7 +1260,47 @@ export class HomeGlobe {
    * a three.js upgrade: there is no public way to say "up has changed", and
    * the alternative is a view whose gestures are reversed.
    */
-  private setCameraUp(up: THREE.Vector3): void {
+  private setCameraUp(up: THREE.Vector3, overMs = 0): void {
+    const cam = this.globe.camera() as THREE.PerspectiveCamera;
+    if (overMs > 0) {
+      const from = cam.up.clone().normalize();
+      const to = up.clone().normalize();
+      const angle = from.angleTo(to);
+      // Already there, or exactly opposite, where there is no one axis to turn
+      // about. Neither is worth animating.
+      if (angle > 1e-4 && angle < Math.PI - 1e-4) {
+        this.upTurn = { start: performance.now(), from, to, axis: from.clone().cross(to).normalize(), angle };
+        this.animateHorizonTurn();
+        return;
+      }
+    }
+    this.upTurn = null;
+    this.applyCameraUp(up);
+  }
+
+  /**
+   * Swing the horizon round rather than cutting to it. The whole world
+   * rotating under you in one frame reads as a glitch; over half a second it
+   * reads as the globe turning to show you something.
+   *
+   * Turned about the axis between the two up vectors, which is a rotation, not
+   * a slide between two directions: a straight interpolation would take the
+   * camera through a shorter, off-plane path and wobble on the way.
+   */
+  private animateHorizonTurn(): void {
+    const turn = this.upTurn;
+    if (!turn || this.disposed) return;
+    const t = Math.min(1, (performance.now() - turn.start) / HORIZON_TURN_MS);
+    // Ease in and out, so it neither jumps off the mark nor arrives hard.
+    const eased = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+    const q = new THREE.Quaternion().setFromAxisAngle(turn.axis, turn.angle * eased);
+    this.applyCameraUp(turn.from.clone().applyQuaternion(q));
+    this.renderThenSettle();
+    if (t >= 1) this.upTurn = null;
+    else requestAnimationFrame(() => this.animateHorizonTurn());
+  }
+
+  private applyCameraUp(up: THREE.Vector3): void {
     const cam = this.globe.camera() as THREE.PerspectiveCamera;
     cam.up.copy(up);
     const controls = this.globe.controls() as unknown as {
@@ -1134,55 +1319,35 @@ export class HomeGlobe {
   }
 
   /**
-   * Look at the middle of the line, stand the line upright on the screen, and
-   * back off until both of its ends are inside the frame.
+   * Stand the line upright on the screen, and move nothing else.
    *
-   * Standing it upright is what makes this work on a phone. Held in portrait
-   * the camera sees about 25 degrees either side of centre vertically and
-   * only about 12 horizontally, and a line to Makkah is usually most of a
-   * quarter turn of the planet. Laid across the screen it needs the camera so
-   * far out that the Earth is a marble; stood on end it fits with the globe
-   * still filling the frame.
+   * Turning the qibla on used to fly the camera somewhere — first to the
+   * middle of the line, then over the user. Both were a zoom as well as a
+   * turn, and being thrown to a new distance is not what asking which way to
+   * face is asking for. The globe stays exactly where it was left; only the
+   * horizon turns, so the line runs up the screen instead of across it.
    *
-   * The altitude is then the projection, not the horizon. A point an angle t
-   * from the point under the camera appears atan(sin t / ((1 + h) - cos t))
-   * off the view axis, so the altitude that brings it to a half-angle f is
-   * cos t + sin t / tan(f) - 1. Fitting to the horizon instead puts both ends
-   * on the visible face and both off the sides of the screen, which is
-   * exactly what the first attempt at this did.
+   * Upright is what makes it readable on a phone. Held in portrait the camera
+   * sees about 25 degrees either side of centre vertically and only about 12
+   * horizontally, so a line laid across the screen runs out of frame in a
+   * quarter of the distance that one stood on end does.
    */
   private frameQiblaLine(): void {
     const { latitude, longitude } = this.data;
-    const cam = this.globe.camera() as THREE.PerspectiveCamera;
     // The globe's own frame, since the camera lives in it.
     const a = v3(this.globe.getCoords(latitude, longitude, 1)).normalize();
     const b = v3(this.globe.getCoords(MECCA.latitude, MECCA.longitude, 1)).normalize();
 
-    const span = a.angleTo(b);
     // Standing in Makkah: no line, so leave the framing alone.
-    if (span < 1e-4) return;
+    if (a.angleTo(b) < 1e-4) return;
 
-    const mid = a.clone().add(b).normalize();
-    // The arc lies in the plane of a and b, so its direction at the midpoint
-    // is the plane's normal turned a quarter turn about the view axis.
+    // The line lies in the plane of the two places, so its direction where it
+    // leaves you is that plane's normal turned a quarter turn about the
+    // straight-up axis at your own position.
     const normal = a.clone().cross(b).normalize();
-    const along = normal.clone().cross(mid).normalize();
+    const along = normal.clone().cross(a).normalize();
 
-    const wanted = (cam.fov / 2) * QIBLA_FRAME_FILL * D2R;
-    const t = span / 2;
-    // Past a quarter turn the far end is behind the planet at any altitude.
-    const needed = t >= 89 * D2R
-      ? QIBLA_MAX_FRAME_ALTITUDE
-      : Math.cos(t) + Math.sin(t) / Math.tan(wanted) - 1;
-    const altitude = Math.min(QIBLA_MAX_FRAME_ALTITUDE, Math.max(QIBLA_MIN_FRAME_ALTITUDE, needed));
-
-    // Upright before the move, so the tween lands already oriented rather than
-    // rolling into place after it.
-    this.setCameraUp(along);
-
-    const geo = xyz2geo(mid);
-    this.globe.pointOfView({ lat: geo.lat, lng: geo.lon, altitude }, 900);
-    this.markAdjusted(true);
+    this.setCameraUp(along, HORIZON_TURN_MS);
   }
 
   // ── ground view (qibla) ───────────────────────────────────────────────
@@ -1255,23 +1420,49 @@ export class HomeGlobe {
     }
   }
 
-  // Scratch vectors for the ground view — applyGroundOrientation runs at
-  // compass rate, so no per-call allocations.
+  // Scratch vectors for the local compass basis, shared by the ground camera
+  // and the heading arrow. Both run at compass rate, so no per-call
+  // allocations. Only one of the two is ever on at a time, which is what makes
+  // sharing these safe: if that ever stops being true, they need splitting.
+  /** The marker's two faces: a dot normally, an arrow while the qibla is up. */
+  private dotTexture?: THREE.Texture;
+  private arrowTexture?: THREE.Texture;
+  /** The pin standing over Makkah, while the qibla is up. */
+  private kaabaPin?: THREE.Sprite;
+  private kaabaPinTex?: THREE.Texture;
+  private showingArrow = false;
+  private smoothArrowHeading = -1;
+  private arrowUp = new THREE.Vector3();
+  private arrowFacing = new THREE.Vector3();
+  private arrowHere = new THREE.Vector3();
+  private arrowAhead = new THREE.Vector3();
+  private arrowCanvas = new THREE.Vector2();
+
   private groundUp = new THREE.Vector3();
   private groundNorth = new THREE.Vector3();
   private groundEast = new THREE.Vector3();
   private groundFacing = new THREE.Vector3();
   private groundLookAt = new THREE.Vector3();
 
+  /**
+   * The direction a phone pointing at `headingDeg` faces, at a place whose
+   * local up is `up`. North is world up flattened into the tangent plane,
+   * which degenerates only at the poles, where any direction will do.
+   */
+  private facingAt(up: THREE.Vector3, headingDeg: number, out: THREE.Vector3): THREE.Vector3 {
+    const north = this.groundNorth.set(0, 1, 0).addScaledVector(up, -up.y);
+    if (north.lengthSq() < 1e-6) north.set(1, 0, 0);
+    north.normalize();
+    const east = this.groundEast.crossVectors(north, up).normalize();
+    const rad = headingDeg * D2R;
+    return out.set(0, 0, 0).addScaledVector(north, Math.cos(rad)).addScaledVector(east, Math.sin(rad));
+  }
+
   /** Point the ground camera at the phone's compass heading, slightly down. */
   private applyGroundOrientation(): void {
     const cam = this.globe.camera() as THREE.PerspectiveCamera;
     const pos = cam.position;
     const up = this.groundUp.copy(pos).normalize();
-    const north = this.groundNorth.set(0, 1, 0).addScaledVector(up, -up.y);
-    if (north.lengthSq() < 1e-6) north.set(1, 0, 0);
-    north.normalize();
-    const east = this.groundEast.crossVectors(north, up).normalize();
 
     const raw = this.data.deviceHeading ?? 0;
     // Low-pass filter the heading (shortest-arc lerp) so the view and the line
@@ -1281,10 +1472,9 @@ export class HomeGlobe {
       let diff = raw - this.smoothHeading;
       if (diff > 180) diff -= 360;
       if (diff < -180) diff += 360;
-      this.smoothHeading = (this.smoothHeading + diff * 0.22 + 360) % 360;
+      this.smoothHeading = (this.smoothHeading + diff * HEADING_SMOOTHING + 360) % 360;
     }
-    const rad = this.smoothHeading * D2R;
-    const facing = this.groundFacing.set(0, 0, 0).addScaledVector(north, Math.cos(rad)).addScaledVector(east, Math.sin(rad));
+    const facing = this.facingAt(up, this.smoothHeading, this.groundFacing);
     cam.up.copy(up);
     this.groundLookAt.copy(pos).add(facing).addScaledVector(up, -GROUND_PITCH);
     cam.lookAt(this.groundLookAt);
@@ -1303,11 +1493,95 @@ export class HomeGlobe {
   }
 
   /**
+   * Swap the location marker between a plain dot and an arrow pointing the way
+   * the phone is facing. The arrow only appears once the reading can be
+   * trusted; before that it would be pointing at noise.
+   */
+  private setMarkerArrow(on: boolean): void {
+    if (on === this.showingArrow || !this.pin) return;
+    this.showingArrow = on;
+    const mat = this.pin.material as THREE.SpriteMaterial;
+    if (on) {
+      if (!this.arrowTexture) this.arrowTexture = headingArrowTexture();
+      mat.map = this.arrowTexture;
+    } else {
+      mat.map = this.dotTexture ?? mat.map;
+      mat.rotation = 0;
+      // So coming back does not swing in from wherever it was left.
+      this.smoothArrowHeading = -1;
+    }
+    mat.needsUpdate = true;
+  }
+
+  /**
+   * Turn the arrow to face the way the phone is pointing.
+   *
+   * Worked in screen space rather than laid flat on the globe: the marker is a
+   * sprite, always square to the camera, and at the shallow angle the surface
+   * makes near the edge of the disc a flat arrow would be squashed to a line.
+   * So the direction is taken into the world at the marker's own position,
+   * projected, and the sprite turned by the angle that comes back — which
+   * stays right however the globe has been turned or rolled.
+   *
+   * Runs per frame off the sprite's own render hook, because it depends on the
+   * camera as much as on the compass.
+   */
+  /**
+   * Take one compass reading into the arrow's smoothed heading, by the shortest
+   * way round the circle.
+   *
+   * Called where readings arrive rather than where the arrow is drawn. Drawn is
+   * the tempting place, since that is where the angle is wanted, but a filter
+   * advanced once a frame settles in a twentieth of a second on a fast screen
+   * and does not smooth anything. The ground camera's copy of this has always
+   * run per reading; now they genuinely match.
+   */
+  private advanceArrowHeading(raw: number): boolean {
+    if (this.smoothArrowHeading < 0) {
+      this.smoothArrowHeading = raw;
+      return true;
+    }
+    let diff = raw - this.smoothArrowHeading;
+    if (diff > 180) diff -= 360;
+    if (diff < -180) diff += 360;
+    this.smoothArrowHeading = (this.smoothArrowHeading + diff * HEADING_SMOOTHING + 360) % 360;
+    return Math.abs(diff) > HEADING_STILL_DEG;
+  }
+
+  private updateHeadingArrow(cam: THREE.PerspectiveCamera): void {
+    if (!this.showingArrow || !this.pin) return;
+
+    const up = this.arrowUp.copy(this.pin.position).normalize();
+    const facing = this.facingAt(up, this.smoothArrowHeading, this.arrowFacing);
+    const here = this.arrowHere.copy(this.pin.position).project(cam);
+    const ahead = this.arrowAhead
+      .copy(this.pin.position)
+      .addScaledVector(facing, GLOBE_RADIUS * 0.04)
+      .project(cam);
+
+    // Projection gives a square -1..1 box; the screen is not square, so the
+    // angle has to be measured in pixels or a portrait phone skews it.
+    const size = this.globe.renderer().getSize(this.arrowCanvas);
+    const angle = Math.atan2((ahead.y - here.y) * size.y, (ahead.x - here.x) * size.x);
+    // The drawn arrow rests pointing up the screen, a quarter turn from the
+    // zero of the angle measured above, and the sprite turns the opposite way
+    // round from that angle.
+    //
+    // Both halves of that were settled on the device rather than reasoned
+    // about, because reasoning got each of them wrong once. The quarter turn
+    // was found by pinning this to zero and looking at where the arrow sat.
+    // The direction was found by turning the phone until the guidance said
+    // "turn left" and checking which way the arrow leaned: it leaned left,
+    // when a phone that has to turn left is pointing to the right of the line.
+    (this.pin.material as THREE.SpriteMaterial).rotation = Math.PI / 2 - angle;
+  }
+
+  /**
    * Draw the thick great-circle line from the user to the Kaaba, and the Kaaba
    * itself standing at the far end of it. Shared by the two ways of looking at
    * the same line: from orbit, and from the ground beside it.
    */
-  private buildGroundLine(kaabaScale = KAABA_SCALE): void {
+  private buildGroundLine(asPin = false): void {
     this.clearGroundLine();
     const { latitude, longitude } = this.data;
     const radius = GLOBE_RADIUS * (1 + GROUND_LINE_ALTITUDE);
@@ -1327,15 +1601,39 @@ export class HomeGlobe {
 
     const geometry = new LineGeometry();
     geometry.setPositions(pts.flatMap((p) => [p.x, p.y, p.z]));
-    const material = new LineMaterial({ color: 0x22d3ee, linewidth: GROUND_LINE_WIDTH_PX, transparent: true, opacity: 0.95, depthTest: false });
+    // Depth-tested from orbit, so the far half of the line goes behind the
+    // planet instead of being drawn across the sky above it. Not from the
+    // ground, where the camera is below the surface the line sits on and
+    // testing would hide the whole thing.
+    const material = new LineMaterial({
+      color: 0x22d3ee, linewidth: GROUND_LINE_WIDTH_PX,
+      transparent: true, opacity: 0.95, depthTest: asPin,
+    });
     const size = this.globe.renderer().getSize(new THREE.Vector2());
     material.resolution.set(size.x, size.y);
     this.groundLineMaterial = material;
     this.groundGroup.add(new Line2(geometry, material));
 
-    // The 3D Kaaba at the line's end point, standing on the surface at Makkah.
+    if (asPin) {
+      // Seen from orbit: a pin, held at a constant size on screen by
+      // updateZoomFades, which also does the lifting that puts its point on
+      // the surface.
+      if (!this.kaabaPinTex) this.kaabaPinTex = kaabaPinTexture();
+      const pin = new THREE.Sprite(
+        new THREE.SpriteMaterial({
+          map: this.kaabaPinTex, transparent: true, depthWrite: false, depthTest: false,
+        })
+      );
+      pin.renderOrder = 4;
+      this.kaabaPin = pin;
+      this.groundGroup.add(pin);
+      this.placeKaabaPin();
+      return;
+    }
+
+    // Seen from the ground beside it: the building itself.
     const kaabaModel = buildKaabaModel();
-    kaabaModel.scale.setScalar(kaabaScale);
+    kaabaModel.scale.setScalar(KAABA_SCALE);
     const kaabaPos = v3(this.globe.getCoords(MECCA.latitude, MECCA.longitude, KAABA_ALTITUDE));
     kaabaModel.position.copy(kaabaPos);
     kaabaModel.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), kaabaPos.clone().normalize());
@@ -1356,6 +1654,33 @@ export class HomeGlobe {
     }
     this.groundLineMaterial?.dispose();
     this.groundLineMaterial = undefined;
+    // The texture is shared across rebuilds and released in dispose(); only the
+    // sprite itself goes here, and the loop above already disposed its
+    // material. Clearing the handle keeps updateZoomFades off a dead object.
+    this.kaabaPin = undefined;
+  }
+
+  /**
+   * Hold the pin at a constant size on screen, and lift it so its point rests
+   * on Makkah rather than its middle sitting on it.
+   */
+  private placeKaabaPin(): void {
+    const pin = this.kaabaPin;
+    if (!pin) return;
+    const cam = this.globe.camera() as THREE.PerspectiveCamera;
+    const surface = v3(this.globe.getCoords(MECCA.latitude, MECCA.longitude, 0));
+    const canvasH = (this.host.clientHeight || 1) * Math.min(window.devicePixelRatio || 1, 2);
+    const dist = Math.max(1, cam.position.distanceTo(surface));
+    const worldSize = (KAABA_PIN_PX * 2 * Math.tan((cam.fov * D2R) / 2) * dist) / canvasH;
+    pin.scale.setScalar(worldSize);
+    pin.position.copy(surface).addScaledVector(
+      surface.clone().normalize(),
+      worldSize * KAABA_PIN_TIP_OFFSET
+    );
+    // Makkah is most of a quarter turn away for most of the world, so from a
+    // camera over the user it is usually round the back. Left alone it would
+    // be drawn on top of the planet anyway, floating over the wrong continent.
+    pin.visible = this.onThisSide(surface, cam);
   }
 
   private tapSphere = new THREE.Sphere(new THREE.Vector3(0, 0, 0), GLOBE_RADIUS);
@@ -1403,6 +1728,7 @@ export class HomeGlobe {
 
   dispose(): void {
     this.disposed = true;
+    this.upTurn = null;
     this.moonFlyAnim = null;
     this.groundFlyAnim = null;
     if (this.idlePauseTimer) clearTimeout(this.idlePauseTimer);
@@ -1456,7 +1782,10 @@ export class HomeGlobe {
       this.moonHalo.material.dispose();
     }
     if (this.pin) {
-      (this.pin.material as THREE.SpriteMaterial).map?.dispose();
+      // Both faces, not just whichever happens to be mounted.
+      this.dotTexture?.dispose();
+      this.arrowTexture?.dispose();
+      this.kaabaPinTex?.dispose();
       this.pin.material.dispose();
     }
     this.placeholderTexture?.dispose();
@@ -1528,12 +1857,34 @@ export class HomeGlobe {
     const w = this.host.clientWidth || 1;
     const h = this.host.clientHeight || 1;
     this.globe?.width(w).height(h);
+    this.dropView(h);
     // Fat lines need the canvas pixel size to compute their screen width.
     const size = this.globe?.renderer().getSize(new THREE.Vector2());
     if (size) {
       this.groundLineMaterial?.resolution.set(size.x, size.y);
       for (const m of this.prayerLineMaterials) m.resolution.set(size.x, size.y);
     }
+  }
+
+  /**
+   * Sit the planet lower in the frame than dead centre.
+   *
+   * The countdown and the line about the prayer that has just been sit across
+   * the top of this screen, and a globe centred in the window comes up hard
+   * against them with nothing between. Rather than move the globe in the scene
+   * — which would fight the controls, since the thing the camera orbits is the
+   * centre of the Earth — the camera renders a window offset upwards from the
+   * one it is given, which slides everything it draws down the screen by the
+   * same amount and leaves the text above it some air.
+   */
+  private dropView(h: number): void {
+    // Through globe.gl's own globeOffset, which is the one setting that
+    // survives. Reaching past it to the camera's view offset — the first two
+    // attempts at this — does nothing at all: the renderer owns that, writes
+    // it from its own state every time the canvas is resized, and puts back
+    // what it had.
+    (this.globe as unknown as { globeOffset?: (o: [number, number]) => void })
+      .globeOffset?.([0, Math.round(h * GLOBE_VIEW_DROP)]);
   }
 
   private buildExtras(): void {
@@ -1630,12 +1981,19 @@ export class HomeGlobe {
     // depthTest off so the marker can sit exactly on the surface without the
     // sphere slicing the half of the sprite that falls behind it; the globe is
     // put back in front of it by hand in updatePinVisibility().
+    this.dotTexture = locationMarkerTexture();
     this.pin = new THREE.Sprite(
       new THREE.SpriteMaterial({
-        map: locationMarkerTexture(), transparent: true, depthWrite: false, depthTest: false,
+        map: this.dotTexture, transparent: true, depthWrite: false, depthTest: false,
       })
     );
+    this.pin.name = 'location';
     this.pin.renderOrder = 3;
+    // The arrow's angle depends on where the camera is as much as on where the
+    // phone points, so it is worked out as the marker is drawn.
+    this.pin.onBeforeRender = (_r, _s, camera) => {
+      this.updateHeadingArrow(camera as THREE.PerspectiveCamera);
+    };
     scene.add(this.pin);
 
     // Sun-position lines (terminator + noon meridian) with salah labels
@@ -1715,6 +2073,23 @@ export class HomeGlobe {
    * the horizon right now) and the noon meridian (where it's currently Dhuhr),
    * each labelled with the user's local salah time at the equator.
    */
+  /**
+   * Take the sun's lines back, or give them their full strength again.
+   *
+   * Re-applied after every rebuild as well as on the way in and out, because
+   * the lines are thrown away and drawn again whenever the day moves, and a
+   * fresh one would come back at full strength over a faded set.
+   */
+  private applyLineFade(): void {
+    for (const obj of this.prayerLinesGroup?.children ?? []) {
+      const mat = (obj as THREE.Mesh).material as THREE.Material | undefined;
+      if (!mat || Array.isArray(mat)) continue;
+      const full = mat.userData.fullOpacity as number | undefined;
+      if (full === undefined) continue;
+      mat.opacity = this.linesFaded ? full * QIBLA_OTHER_LINE_OPACITY : full;
+    }
+  }
+
   private rebuildPrayerLines(sunLat: number, sunLon: number): void {
     // Clear the previous lines + labels.
     this.prayerLineMaterials.length = 0;
@@ -1754,6 +2129,8 @@ export class HomeGlobe {
       if (!text) return;
       const pos = geo2xyz(lat, lon, labelRadius);
       const sprite = prayerLabelSprite(text, color);
+      sprite.material.transparent = true;
+      sprite.material.userData.fullOpacity = sprite.material.opacity;
       sprite.position.set(pos.x, pos.y, pos.z);
       this.prayerLinesGroup.add(sprite);
     };
@@ -1765,6 +2142,9 @@ export class HomeGlobe {
       const geo = new LineGeometry();
       geo.setPositions(flat);
       const mat = new LineMaterial({ color, linewidth: widthPx, transparent: true, opacity });
+      // Kept so the qibla can take these back without losing what each one was
+      // worth: they are not all drawn at the same strength to begin with.
+      mat.userData.fullOpacity = opacity;
       mat.resolution.set(size.x, size.y);
       this.prayerLineMaterials.push(mat);
       this.prayerLinesGroup.add(new Line2(geo, mat));
@@ -1849,6 +2229,8 @@ export class HomeGlobe {
     addLabel(maghribAt.lat, maghribAt.lon, fmt('maghrib'), PRAYER_ACCENTS.maghrib);
     addLabel(ishaAt.lat, ishaAt.lon, fmt('isha'), PRAYER_ACCENTS.isha);
     this.updateLabelAnchors();
+    // Whatever was just drawn has to respect the qibla, if it is up.
+    this.applyLineFade();
   }
 
   private labelNdc = new THREE.Vector3();
@@ -1927,10 +2309,17 @@ export class HomeGlobe {
    * R / camera distance.
    */
   private updatePinVisibility(cam: THREE.PerspectiveCamera): void {
+    this.pin.visible = this.onThisSide(this.pin.position, cam);
+  }
+
+  /** Whether a point on the surface is on the half of the planet facing the
+   *  camera. Markers are drawn without a depth test so they sit exactly on the
+   *  surface rather than half-buried in it, which means nothing else will hide
+   *  them when they go round the back. */
+  private onThisSide(point: THREE.Vector3, cam: THREE.PerspectiveCamera): boolean {
     const camDist = cam.position.length();
     const horizonCos = camDist > GLOBE_RADIUS ? GLOBE_RADIUS / camDist : 0;
-    const facing = this.pin.position.dot(cam.position) / (GLOBE_RADIUS * camDist);
-    this.pin.visible = facing > horizonCos;
+    return point.dot(cam.position) / (point.length() * camDist) > horizonCos;
   }
 
   private updateZoomFades(): void {
@@ -1948,6 +2337,7 @@ export class HomeGlobe {
     const dist = Math.max(1, cam.position.distanceTo(this.pin.position));
     const worldSize = (PIN_SIZE_PX * 2 * Math.tan((cam.fov * D2R) / 2) * dist) / canvasH;
     this.pin.scale.setScalar(worldSize);
+    this.placeKaabaPin();
     this.updatePinVisibility(cam);
     // This is the camera-changed hook, so it is also where labels re-anchor.
     this.updateLabelAnchors();

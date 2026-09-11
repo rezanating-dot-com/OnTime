@@ -193,24 +193,24 @@ describe('User story: I can switch between List and Globe home views', () => {
     expect(screen.getByTestId('home-globe-screen')).toHaveAttribute('data-covered', 'true');
   });
 
-  it('portals the location map popup outside the header in Globe mode, so it does not inherit the glow HUD text colors', async () => {
+  it('does not open a map card when the city is tapped, and does not look like it would', async () => {
     const user = userEvent.setup();
 
-    let result: ReturnType<typeof renderApp> | undefined;
     await act(async () => {
-      result = renderApp({ homeView: 'globe' });
+      renderApp({ homeView: 'globe' });
     });
     await screen.findByTestId('home-globe-screen');
-    const { container } = result!;
 
-    await user.click(screen.getByText('Toronto'));
+    // There used to be a card here with a map of where you are, fetched from
+    // OpenStreetMap. The globe behind it draws the same thing from the same
+    // coordinates without asking anyone for a picture, so the card went.
+    const city = await screen.findByText('Toronto');
+    await user.click(city);
 
-    const openInMaps = await screen.findByText('Open in Maps');
-    const header = container.querySelector('header');
-    expect(header).not.toBeNull();
-    expect(header?.contains(openInMaps)).toBe(false);
-    expect(container.contains(openInMaps)).toBe(false);
-    expect(document.body.contains(openInMaps)).toBe(true);
+    expect(screen.queryByText('Open in Maps')).not.toBeInTheDocument();
+    expect(screen.queryByTitle('Location map')).not.toBeInTheDocument();
+    // And it no longer invites the tap.
+    expect(city.closest('button')).toBeNull();
   });
 
   it('stops the full-screen content column from swallowing touches in Globe mode', async () => {

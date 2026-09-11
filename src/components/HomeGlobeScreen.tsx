@@ -2,7 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useSta
 import { useLocation } from '../context/LocationContext';
 import { useSettings } from '../context/SettingsContext';
 import { twilightAnglesFor, asrShadowFactor as shadowFactorFor } from '../services/prayerService';
-import { useQibla } from '../hooks/useQibla';
+import { useQiblaHeading } from '../hooks/useQiblaHeading';
 import { cardinalDirection } from '../utils/bearing';
 import { GlobeLoader, GLOBE_LOADER_FADE_MS } from './GlobeLoader';
 import type { PrayerTime } from '../types';
@@ -69,7 +69,10 @@ export function HomeGlobeScreen({
   const twilight = twilightAnglesFor(settings.calculationMethod);
   const [now, setNow] = useState(() => new Date());
   const [groundMode, setGroundMode] = useState(false);
-  const { deviceHeading, qiblaDirection, accuracy, error, startListening, stopListening } = useQibla();
+  // One compass for the screen and the globe both. It starts and stops itself
+  // with the flag below, and buzzes once when you line up.
+  const compass = useQiblaHeading((groundMode || qiblaMode) && !covered);
+  const { qiblaDirection, deviceHeading, calibrated, unavailable, rotation } = compass;
   const smoothRot = useRef<number | null>(null);
   const [rot, setRot] = useState(0);
   const viewRef = useRef<HomeGlobe | null>(null);
@@ -106,15 +109,11 @@ export function HomeGlobeScreen({
   }, []);
 
   // Run the compass only while in ground view — and not under an overlay.
+  // Forget the smoothing when the compass is put away, so coming back does not
+  // swing in from wherever it was left.
   useEffect(() => {
-    // Both ways of showing the qibla need the compass: the guidance below is
-    // the half that tells you which way to turn in the room.
-    if ((groundMode || qiblaMode) && !covered) startListening();
-    else {
-      stopListening();
-      smoothRot.current = null;
-    }
-  }, [groundMode, qiblaMode, covered, startListening, stopListening]);
+    if (!((groundMode || qiblaMode) && !covered)) smoothRot.current = null;
+  }, [groundMode, qiblaMode, covered]);
 
   const onView = useCallback((view: HomeGlobe) => {
     viewRef.current = view;
@@ -139,15 +138,15 @@ export function HomeGlobeScreen({
     // magnetometer or it does not, and that does not change while the app is
     // open. A reading arriving later still lights the guidance, because that
     // path does not depend on this at all.
-    if (!(groundMode || qiblaMode) || accuracy >= 2) return;
+    if (!(groundMode || qiblaMode) || calibrated) return;
     const id = setTimeout(() => setAskedLongEnough(true), COMPASS_PATIENCE_MS);
     return () => clearTimeout(id);
-  }, [groundMode, qiblaMode, accuracy]);
+  }, [groundMode, qiblaMode, calibrated]);
 
   useLayoutEffect(() => {
     let rawRot = 0;
-    if ((groundMode || qiblaMode) && accuracy >= 2 && deviceHeading != null) {
-      rawRot = ((qiblaDirection - deviceHeading + 540) % 360) - 180;
+    if ((groundMode || qiblaMode) && calibrated) {
+      rawRot = ((rotation + 540) % 360) - 180;
     }
     if (smoothRot.current === null) smoothRot.current = rawRot;
     else {
@@ -158,7 +157,7 @@ export function HomeGlobeScreen({
     }
     const next = Math.round(smoothRot.current);
     setRot((prev) => (prev === next ? prev : next));
-  }, [groundMode, qiblaMode, accuracy, deviceHeading, qiblaDirection]);
+  }, [groundMode, qiblaMode, calibrated, rotation]);
 
   return (
     // Not aria-hidden as a whole: the view controls below are real buttons, and
@@ -192,6 +191,9 @@ export function HomeGlobeScreen({
             groundMode,
             qiblaMode,
             deviceHeading,
+            // The marker only becomes an arrow once the reading can be
+            // trusted. An arrow pointing at noise is worse than a plain dot.
+            headingCalibrated: calibrated,
             qiblaDirection,
           }}
           // Cross-fades in against the loader once the first complete frame
@@ -243,9 +245,9 @@ export function HomeGlobeScreen({
           style={{ textShadow: '0 1px 8px rgba(0,0,0,0.9)' }}
         >
           <div className="text-base font-medium">
-            {error ? (
+            {unavailable ? (
               <span className="text-white/80">Compass unavailable — check location permission</span>
-            ) : accuracy < 2 ? (
+            ) : !calibrated ? (
               askedLongEnough ? null : (
                 <span className="text-white/80">Hold the phone flat and sweep a figure-8</span>
               )

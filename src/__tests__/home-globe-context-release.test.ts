@@ -111,6 +111,7 @@ beforeEach(() => {
     createLinearGradient: () => ({ addColorStop: () => {} }),
     clearRect: () => {}, fillRect: () => {}, beginPath: () => {}, closePath: () => {},
     arc: () => {}, moveTo: () => {}, lineTo: () => {}, roundRect: () => {},
+    bezierCurveTo: () => {}, quadraticCurveTo: () => {},
     fill: () => {}, stroke: () => {}, fillText: () => {}, strokeText: () => {},
     save: () => {}, restore: () => {}, translate: () => {}, scale: () => {},
   })) as unknown as typeof HTMLCanvasElement.prototype.getContext;

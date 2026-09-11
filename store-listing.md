@@ -37,10 +37,9 @@ OnTime has no account, no analytics, no advertising, and no third-party
 tracking. Prayer times, Qibla bearings and sun positions are all worked out on
 your device.
 
-Four things do reach the internet, and none of them is about you:
+Three things do reach the internet, and none of them is about you:
 
 - your coordinates go to OpenStreetMap to turn them into a city name
-- the map preview, when you open it, is loaded from OpenStreetMap
 - the globe's satellite photo ships inside the app, so it needs no network at all until you zoom in; past that it streams sharper imagery from Esri, and those requests show roughly which part of the world you are looking at
 - athan recordings are downloaded from Assabile, only when you choose one
 

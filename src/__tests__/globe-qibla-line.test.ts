@@ -18,6 +18,8 @@ import { HomeGlobe } from '../components/three/homeGlobe';
 const harness = vi.hoisted(() => ({
   globe: null as unknown as FakeGlobeShape,
   povs: [] as { lat: number; lng: number; altitude: number }[],
+  /** Times the view has asked for the render loop to run. */
+  wakes: 0,
 }));
 
 interface FakeGlobeShape {
@@ -49,7 +51,10 @@ vi.mock('globe.gl', async () => {
     };
     private rendererObj = {
       domElement: document.createElement('canvas'),
-      getSize: (v: THREE.Vector2) => v.set(800, 600),
+      // The shape of the phone this is aimed at, not a 4:3 desktop frame: the
+      // skew that a tall screen puts on every measured angle is the whole
+      // reason the arrow's angle is worked out in pixels.
+      getSize: (v: THREE.Vector2) => v.set(448, 997),
       render: () => {},
       dispose: () => {},
       forceContextLoss: () => {},
@@ -82,7 +87,7 @@ vi.mock('globe.gl', async () => {
       return { x: r * s * Math.cos(theta), y: r * Math.cos(phi), z: r * s * Math.sin(theta) };
     }
     pauseAnimation() {}
-    resumeAnimation() {}
+    resumeAnimation() { harness.wakes++; }
     _destructor() {}
     flushDeferredInit() {
       this.sceneObj.add(this.globeMesh);
@@ -106,6 +111,20 @@ const data = {
 };
 
 const nextFrame = () => new Promise((r) => requestAnimationFrame(r));
+
+/**
+ * Wait out the swing. The horizon turns over about half a second rather than
+ * cutting, so anything asserting where it ended up has to let it get there.
+ */
+async function horizonSettles(): Promise<void> {
+  const cam = harness.globe.cameraObj;
+  let last = cam.up.clone();
+  for (let i = 0; i < 90; i++) {
+    await nextFrame();
+    if (i > 2 && cam.up.distanceTo(last) < 1e-9) return;
+    last = cam.up.clone();
+  }
+}
 const qiblaGroup = () => harness.globe.sceneObj.getObjectByName('qibla')!;
 /** The same lat/lon to cartesian the globe itself uses, for the assertions. */
 const at = (lat: number, lon: number) => {
@@ -119,6 +138,7 @@ let origGetContext: typeof HTMLCanvasElement.prototype.getContext;
 
 beforeEach(async () => {
   harness.povs = [];
+  harness.wakes = 0;
   origGetContext = HTMLCanvasElement.prototype.getContext;
   HTMLCanvasElement.prototype.getContext = (() => ({
     measureText: () => ({ width: 10 }),
@@ -126,6 +146,7 @@ beforeEach(async () => {
     createLinearGradient: () => ({ addColorStop: () => {} }),
     clearRect: () => {}, fillRect: () => {}, beginPath: () => {}, closePath: () => {},
     arc: () => {}, moveTo: () => {}, lineTo: () => {}, roundRect: () => {},
+    bezierCurveTo: () => {}, quadraticCurveTo: () => {},
     fill: () => {}, stroke: () => {}, fillText: () => {}, strokeText: () => {},
     save: () => {}, restore: () => {}, translate: () => {}, scale: () => {},
   })) as unknown as typeof HTMLCanvasElement.prototype.getContext;
@@ -172,37 +193,91 @@ describe('User story: the qibla drawn on the globe already up', () => {
     expect(qiblaGroup().children.length).toBe(0);
   });
 
-  it('backs the camera off far enough to see both ends of the line', () => {
+  it('fades the sun\'s own lines back while the qibla is up, and returns them after', () => {
+    const lines = harness.globe.sceneObj.children.find(
+      (o) => o.type === 'Group' && o !== harness.globe.sceneObj.getObjectByName('qibla'),
+    );
+    const lit = (): number[] =>
+      (lines?.children ?? [])
+        .map((o) => (o as THREE.Mesh).material as THREE.Material)
+        .filter((m) => m && !Array.isArray(m) && m.userData.fullOpacity !== undefined)
+        .map((m) => m.opacity / (m.userData.fullOpacity as number));
+
+    const before = lit();
+    expect(before.length).toBeGreaterThan(0);
+    expect(Math.max(...before)).toBeCloseTo(1, 6);
+
     view.update({ ...data, qiblaMode: true } as never);
 
-    const framed = harness.povs.at(-1)!;
-    // Toronto to Makkah is about 100 degrees of arc, so the camera has to be
-    // able to see 50 degrees either side of the midpoint. From altitude h the
-    // horizon is acos(1 / (1 + h)) away, which needs h of at least about 0.56
-    // before the ends are even on the edge, and more to clear the silhouette.
-    const horizonDeg = (Math.acos(1 / (1 + framed.altitude)) * 180) / Math.PI;
-    expect(horizonDeg).toBeGreaterThan(55);
-    // And not so far that the globe is a marble.
-    expect(framed.altitude).toBeLessThanOrEqual(3.2);
+    // Not hidden: they are the reason this globe exists. Taken back far enough
+    // that the one line being asked about is the one the eye lands on.
+    const faded = lit();
+    expect(Math.max(...faded)).toBeLessThan(0.3);
+    expect(Math.min(...faded)).toBeGreaterThan(0);
+
+    view.update({ ...data, qiblaMode: false } as never);
+
+    expect(Math.max(...lit())).toBeCloseTo(1, 6);
+    expect(Math.min(...lit())).toBeCloseTo(1, 6);
   });
 
-  it('stands the line upright on the screen, and lays the horizon back flat after', () => {
+  it('swings the horizon round rather than cutting to it', async () => {
+    const cam = harness.globe.cameraObj;
+    const start = cam.up.clone();
+
+    view.update({ ...data, qiblaMode: true } as never);
+    await nextFrame();
+    const afterAFrame = cam.up.clone();
+
+    await horizonSettles();
+    const arrived = cam.up.clone();
+
+    // A frame in, it has set off but is nowhere near there. The whole world
+    // rotating under you in one frame reads as a glitch; over half a second it
+    // reads as the globe turning to show you something.
+    expect(afterAFrame.angleTo(arrived)).toBeGreaterThan(0.05);
+    expect(start.angleTo(arrived)).toBeGreaterThan(0.05);
+  });
+
+  it('moves the camera nowhere at all', () => {
+    const cam = harness.globe.cameraObj;
+    cam.position.set(0, 0, 420);
+    const before = cam.position.clone();
+    harness.povs = [];
+
+    view.update({ ...data, qiblaMode: true } as never);
+
+    // Asking which way to face is not asking to be thrown to a new distance.
+    // Two earlier goes at this flew somewhere — to the middle of the line, and
+    // then over the user — and both were a zoom as well as a turn.
+    expect(harness.povs).toHaveLength(0);
+    expect(cam.position.distanceTo(before)).toBe(0);
+
+    view.update({ ...data, qiblaMode: false } as never);
+
+    expect(harness.povs).toHaveLength(0);
+    expect(cam.position.distanceTo(before)).toBe(0);
+  });
+
+  it('stands the line upright on the screen, and lays the horizon back flat after', async () => {
     const cam = harness.globe.cameraObj;
     const here = at(data.latitude, data.longitude);
     const makkah = at(21.4225, 39.8262);
-    const mid = here.clone().add(makkah).normalize();
     const normal = here.clone().cross(makkah).normalize();
 
     view.update({ ...data, qiblaMode: true } as never);
+    await horizonSettles();
 
-    // Upright means: square to the direction the camera is looking, and lying
-    // in the plane the line is drawn in. A phone is far taller than it is
-    // wide, and a line to Makkah laid across it does not fit.
-    expect(Math.abs(cam.up.dot(mid))).toBeLessThan(1e-6);
+    // Upright means: square to the direction the camera is looking, which is
+    // straight down at where you are, and lying in the plane the line is drawn
+    // in. A phone is far taller than it is wide, and a line to Makkah laid
+    // across it runs out of frame in a quarter of the distance.
+    expect(Math.abs(cam.up.dot(here))).toBeLessThan(1e-6);
     expect(Math.abs(cam.up.dot(normal))).toBeLessThan(1e-6);
     expect(cam.up.length()).toBeCloseTo(1, 6);
 
     view.update({ ...data, qiblaMode: false } as never);
+    await horizonSettles();
 
     // Every other part of the globe assumes north is up.
     expect(cam.up.x).toBeCloseTo(0, 6);
@@ -245,13 +320,209 @@ describe('User story: the qibla drawn on the globe already up', () => {
     expect(Math.abs(carried.z)).toBeLessThan(1e-5);
   });
 
-  it('frames the middle of the line, not the user and not Makkah', () => {
+  it('leaves the globe wherever it was left, however far that is from you', () => {
+    // Dragged round to look at somewhere else entirely.
+    const cam = harness.globe.cameraObj;
+    cam.position.set(300, 120, -260);
+    const before = cam.position.clone();
+
     view.update({ ...data, qiblaMode: true } as never);
 
-    const framed = harness.povs.at(-1)!;
-    // Somewhere in the north Atlantic, between Toronto and Makkah.
-    expect(framed.lng).toBeGreaterThan(data.longitude);
-    expect(framed.lng).toBeLessThan(40);
-    expect(framed.lat).toBeGreaterThan(30);
+    expect(cam.position.distanceTo(before)).toBe(0);
+  });
+});
+
+/**
+ * User story: the dot where I am becomes an arrow showing which way I face.
+ *
+ * A dot tells you where you are, which you knew. Turned into an arrow that
+ * follows the phone, it tells you which way you are pointing — and lining it up
+ * with the line to the Kaaba is the whole job, without having to read a number.
+ *
+ * The marker is a sprite, always square to the camera, so the arrow is turned
+ * in screen space: the facing direction is taken into the world at the
+ * marker's own position, projected, and the sprite turned by the angle that
+ * comes back. That keeps it right however the globe has been turned or rolled,
+ * where an arrow laid flat on the surface would be squashed to a line near the
+ * edge of the disc.
+ */
+describe('User story: the marker that shows which way I am facing', () => {
+  const marker = () => harness.globe.sceneObj.getObjectByName('location') as THREE.Sprite;
+
+  /** Stand in for a frame: the rotation is worked out as the marker is drawn. */
+  const draw = () => {
+    const cam = harness.globe.cameraObj;
+    cam.position.copy(marker().position).multiplyScalar(3);
+    cam.lookAt(0, 0, 0);
+    cam.updateMatrixWorld(true);
+    marker().onBeforeRender(
+      null as never, null as never, cam, null as never, marker().material, null as never,
+    );
+    return (marker().material as THREE.SpriteMaterial).rotation;
+  };
+
+  it('stays a plain dot while the qibla is not up', () => {
+    const dot = (marker().material as THREE.SpriteMaterial).map;
+
+    view.update({ ...data, deviceHeading: 30, headingCalibrated: true } as never);
+
+    expect((marker().material as THREE.SpriteMaterial).map).toBe(dot);
+  });
+
+  it('stays a plain dot while the reading cannot be trusted', () => {
+    const dot = (marker().material as THREE.SpriteMaterial).map;
+
+    // An arrow pointing at noise is worse than no arrow.
+    view.update({ ...data, qiblaMode: true, deviceHeading: 30, headingCalibrated: false } as never);
+
+    expect((marker().material as THREE.SpriteMaterial).map).toBe(dot);
+  });
+
+  it('becomes an arrow once the qibla is up and the reading has settled', () => {
+    const dot = (marker().material as THREE.SpriteMaterial).map;
+
+    view.update({ ...data, qiblaMode: true, deviceHeading: 30, headingCalibrated: true } as never);
+
+    expect((marker().material as THREE.SpriteMaterial).map).not.toBe(dot);
+  });
+
+  it('goes back to the dot when the qibla is switched off', () => {
+    const dot = (marker().material as THREE.SpriteMaterial).map;
+    view.update({ ...data, qiblaMode: true, deviceHeading: 30, headingCalibrated: true } as never);
+    expect((marker().material as THREE.SpriteMaterial).map).not.toBe(dot);
+
+    view.update({ ...data, qiblaMode: false } as never);
+
+    expect((marker().material as THREE.SpriteMaterial).map).toBe(dot);
+    expect((marker().material as THREE.SpriteMaterial).rotation).toBe(0);
+  });
+
+  it('rests pointing the way the phone points, not a quarter or a half turn off it', () => {
+    // On the equator at longitude zero, with the camera straight above and the
+    // world's north up the screen, a phone pointing north is a phone pointing
+    // up the screen. So the sprite should not be turned at all.
+    //
+    // This is the assertion that was missing when the arrow first shipped
+    // pointing backwards: every other term was right, and the constant that
+    // relates the drawn shape to the measured angle was guessed rather than
+    // measured.
+    view.update({
+      ...data, latitude: 0, longitude: 0,
+      qiblaMode: true, deviceHeading: 0, headingCalibrated: true,
+    } as never);
+
+    const cam = harness.globe.cameraObj;
+    cam.position.set(0, 0, 600);
+    cam.up.set(0, 1, 0);
+    cam.lookAt(0, 0, 0);
+    cam.updateMatrixWorld(true);
+    marker().onBeforeRender(
+      null as never, null as never, cam, null as never, marker().material, null as never,
+    );
+
+    expect((marker().material as THREE.SpriteMaterial).rotation).toBeCloseTo(0, 3);
+  });
+
+  it('leans the way the phone leans, not the mirror of it', () => {
+    // Same frame as above: on the equator at longitude zero with the camera
+    // straight above and the world's north up the screen, east is to the
+    // right. A phone pointing east should put the arrow on its right side.
+    //
+    // This is the assertion that was missing when the arrow leaned the wrong
+    // way on the device: pointing it up and turning it a half turn both work
+    // whichever way round the sprite turns, so nothing here could tell.
+    view.update({
+      ...data, latitude: 0, longitude: 0,
+      qiblaMode: true, deviceHeading: 90, headingCalibrated: true,
+    } as never);
+
+    const cam = harness.globe.cameraObj;
+    cam.position.set(0, 0, 600);
+    cam.up.set(0, 1, 0);
+    cam.lookAt(0, 0, 0);
+    cam.updateMatrixWorld(true);
+    marker().onBeforeRender(
+      null as never, null as never, cam, null as never, marker().material, null as never,
+    );
+
+    // A quarter turn, and the sign is the whole point: the other sign puts the
+    // arrow out to the left while the guidance says to turn right.
+    expect((marker().material as THREE.SpriteMaterial).rotation).toBeCloseTo(Math.PI / 2, 3);
+  });
+
+  it('asks for a frame when the phone turns, and stops asking when it is held still', () => {
+    view.update({ ...data, qiblaMode: true, deviceHeading: 10, headingCalibrated: true } as never);
+
+    // Nothing else on this globe moves for a compass reading, so the render
+    // loop is parked. A turning phone has to ask for its own frames or the
+    // arrow sticks while the guidance under it goes on updating.
+    harness.wakes = 0;
+    view.update({ ...data, qiblaMode: true, deviceHeading: 40, headingCalibrated: true } as never);
+    expect(harness.wakes).toBeGreaterThan(0);
+
+    // Held still, the filter goes on easing towards the same reading for ever.
+    // Asking for a frame on any change at all would hold the loop open for the
+    // life of the screen.
+    for (let i = 0; i < 80; i++) {
+      view.update({ ...data, qiblaMode: true, deviceHeading: 40, headingCalibrated: true } as never);
+    }
+    harness.wakes = 0;
+    for (let i = 0; i < 20; i++) {
+      view.update({ ...data, qiblaMode: true, deviceHeading: 40, headingCalibrated: true } as never);
+    }
+    expect(harness.wakes).toBe(0);
+  });
+
+  it('settles towards a new heading once per reading, not once per drawn frame', () => {
+    view.update({ ...data, qiblaMode: true, deviceHeading: 0, headingCalibrated: true } as never);
+    draw();
+
+    // One reading of a heading a quarter turn away: the arrow should start
+    // easing towards it.
+    view.update({ ...data, qiblaMode: true, deviceHeading: 90, headingCalibrated: true } as never);
+    const afterOneReading = draw();
+    for (let i = 0; i < 10; i++) draw();
+    const afterTenMoreFrames = draw();
+
+    // Drawing the same state again is not the same as hearing from the
+    // compass again. Advanced per frame, the easing would be finished by now
+    // and would smooth nothing on a fast screen.
+    expect(afterTenMoreFrames).toBeCloseTo(afterOneReading, 9);
+
+    // A second reading does move it on.
+    view.update({ ...data, qiblaMode: true, deviceHeading: 90, headingCalibrated: true } as never);
+    expect(Math.abs(draw() - afterOneReading)).toBeGreaterThan(0.01);
+  });
+
+  it('turns the arrow right round when the phone turns right round', () => {
+    view.update({ ...data, qiblaMode: true, deviceHeading: 0, headingCalibrated: true } as never);
+    const north = draw();
+
+    // Off and on again, so the smoothing starts from the new heading rather
+    // than easing towards it over the next fifty frames.
+    view.update({ ...data, qiblaMode: false } as never);
+    view.update({ ...data, qiblaMode: true, deviceHeading: 180, headingCalibrated: true } as never);
+    const south = draw();
+
+    // Half a turn on the phone is half a turn on screen, exactly, whatever the
+    // shape of the screen: reversing a direction reverses its projection.
+    const apart = Math.abs(((south - north + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
+    expect(Math.PI - apart).toBeLessThan(0.02);
+  });
+
+  it('turns the arrow by a quarter when the phone turns by a quarter', () => {
+    view.update({ ...data, qiblaMode: true, deviceHeading: 0, headingCalibrated: true } as never);
+    const north = draw();
+
+    view.update({ ...data, qiblaMode: false } as never);
+    view.update({ ...data, qiblaMode: true, deviceHeading: 90, headingCalibrated: true } as never);
+    const east = draw();
+
+    // Not a quarter turn on screen to the decimal: the frame is more than
+    // twice as tall as it is wide, and that skews every angle but a reversal.
+    // Nowhere near standing still either.
+    const apart = Math.abs(((east - north + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
+    expect(apart).toBeGreaterThan(0.8);
+    expect(apart).toBeLessThan(2.4);
   });
 });

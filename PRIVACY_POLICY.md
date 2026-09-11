@@ -34,7 +34,7 @@ direction. Approximate ("coarse") location is enough; the app works fine if you
 choose it, and it works fine if you decline location entirely and set your city
 by hand.
 
-Your coordinates leave the device in three situations, all described below.
+Your coordinates leave the device in two situations, both described below.
 
 ## Every network request the app makes
 
@@ -46,15 +46,7 @@ numbers. This happens when your location is first found and whenever you
 refresh it. Nominatim's usage policy:
 https://operations.osmfoundation.org/policies/nominatim/
 
-**2. The map preview — OpenStreetMap**
-`openstreetmap.org`
-
-Tapping your city name opens a small map centred on you. That embedded map is
-loaded from OpenStreetMap and receives your coordinates, along with whatever a
-web request normally carries, including your IP address. It loads only when you
-open that preview.
-
-**3. The globe's surface imagery — Esri**
+**2. The globe's surface imagery — Esri**
 `server.arcgisonline.com`
 
 **Only if you zoom in.** The globe home screen paints the Earth with a
@@ -71,7 +63,7 @@ https://www.esri.com/en-us/privacy/overview
 Two ways this never runs: leave the globe at its normal zoom, or use the list
 home view instead.
 
-**4. Athan recordings — Assabile**
+**3. Athan recordings — Assabile**
 `www.assabile.com`
 
 Only when you go looking for them. Opening the athan sound picker in Settings
