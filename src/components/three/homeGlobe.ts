@@ -1290,10 +1290,30 @@ export class HomeGlobe {
       this.pin.material.dispose();
     }
     this.placeholderTexture?.dispose();
+    // Held before the destructor runs, because afterwards there is nothing
+    // left to ask for it.
+    let renderer: THREE.WebGLRenderer | undefined;
+    try {
+      renderer = this.globe?.renderer() as THREE.WebGLRenderer | undefined;
+    } catch {
+      // Nothing to release if the globe never finished building.
+    }
     try {
       (this.globe as unknown as { _destructor?: () => void })._destructor?.();
     } catch {
       // The canvas removal below is enough if the internal hook is missing.
+    }
+    // Dropping the JavaScript objects is not enough. The WebGL context holds
+    // its own allocation in the GPU driver, and on Android that allocation
+    // survives every dispose above and the canvas being removed — switching
+    // between the globe and the list added the globe's whole graphics cost
+    // again on each switch, and never gave any of it back. Losing the context
+    // is what actually hands the memory over.
+    try {
+      renderer?.dispose();
+      renderer?.forceContextLoss();
+    } catch {
+      // A context already lost throws here, which is the state we wanted.
     }
     this.host.querySelectorAll('canvas').forEach((c) => c.remove());
   }
