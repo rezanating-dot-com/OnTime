@@ -18,6 +18,8 @@ import { HomeGlobe } from '../components/three/homeGlobe';
 const harness = vi.hoisted(() => ({
   globe: null as unknown as FakeGlobeShape,
   povs: [] as { lat: number; lng: number; altitude: number }[],
+  /** Times the view has asked for the render loop to run. */
+  wakes: 0,
 }));
 
 interface FakeGlobeShape {
@@ -85,7 +87,7 @@ vi.mock('globe.gl', async () => {
       return { x: r * s * Math.cos(theta), y: r * Math.cos(phi), z: r * s * Math.sin(theta) };
     }
     pauseAnimation() {}
-    resumeAnimation() {}
+    resumeAnimation() { harness.wakes++; }
     _destructor() {}
     flushDeferredInit() {
       this.sceneObj.add(this.globeMesh);
@@ -122,6 +124,7 @@ let origGetContext: typeof HTMLCanvasElement.prototype.getContext;
 
 beforeEach(async () => {
   harness.povs = [];
+  harness.wakes = 0;
   origGetContext = HTMLCanvasElement.prototype.getContext;
   HTMLCanvasElement.prototype.getContext = (() => ({
     measureText: () => ({ width: 10 }),
@@ -348,6 +351,29 @@ describe('User story: the marker that shows which way I am facing', () => {
     );
 
     expect((marker().material as THREE.SpriteMaterial).rotation).toBeCloseTo(0, 3);
+  });
+
+  it('asks for a frame when the phone turns, and stops asking when it is held still', () => {
+    view.update({ ...data, qiblaMode: true, deviceHeading: 10, headingCalibrated: true } as never);
+
+    // Nothing else on this globe moves for a compass reading, so the render
+    // loop is parked. A turning phone has to ask for its own frames or the
+    // arrow sticks while the guidance under it goes on updating.
+    harness.wakes = 0;
+    view.update({ ...data, qiblaMode: true, deviceHeading: 40, headingCalibrated: true } as never);
+    expect(harness.wakes).toBeGreaterThan(0);
+
+    // Held still, the filter goes on easing towards the same reading for ever.
+    // Asking for a frame on any change at all would hold the loop open for the
+    // life of the screen.
+    for (let i = 0; i < 80; i++) {
+      view.update({ ...data, qiblaMode: true, deviceHeading: 40, headingCalibrated: true } as never);
+    }
+    harness.wakes = 0;
+    for (let i = 0; i < 20; i++) {
+      view.update({ ...data, qiblaMode: true, deviceHeading: 40, headingCalibrated: true } as never);
+    }
+    expect(harness.wakes).toBe(0);
   });
 
   it('settles towards a new heading once per reading, not once per drawn frame', () => {

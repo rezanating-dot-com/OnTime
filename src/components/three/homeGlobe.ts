@@ -220,6 +220,9 @@ const KAABA_SCALE = 2.2;
  */
 const HEADING_SMOOTHING = 0.22;
 
+/** Below this much movement between readings, treat the phone as held still. */
+const HEADING_STILL_DEG = 0.15;
+
 /** The same Kaaba seen from orbit rather than from the ground beside it. At
  *  the ground-view scale it is a speck a few pixels across. */
 const KAABA_ORBIT_SCALE = 9;
@@ -815,7 +818,20 @@ export class HomeGlobe {
     this.data = data;
     if (!this.ready) return;
     this.setMarkerArrow(!!data.qiblaMode && !!data.headingCalibrated && !data.groundMode);
-    if (this.showingArrow) this.advanceArrowHeading(data.deviceHeading ?? 0);
+    // The arrow is drawn from the compass, and a heading is deliberately not
+    // one of the things that counts as the scene having changed below — the
+    // sun and the prayer lines do not move for it. But the arrow does, and the
+    // loop is parked whenever nothing else is moving, so a reading that turned
+    // the phone has to ask for a frame of its own. Without this the arrow
+    // sticks while the guidance under it goes on updating and the phone goes
+    // on buzzing, which is exactly how it looked.
+    //
+    // Only while it is actually turning: the filter above eases towards every
+    // reading forever, so asking on any change at all would hold the loop open
+    // for the life of the screen. The ground camera answers this the same way.
+    if (this.showingArrow && this.advanceArrowHeading(data.deviceHeading ?? 0)) {
+      this.renderThenSettle();
+    }
     const wantQibla = !!data.qiblaMode && !data.groundMode;
     if (wantQibla !== this.inQiblaMode) {
       if (wantQibla) this.enterQiblaMode();
@@ -1411,15 +1427,16 @@ export class HomeGlobe {
    * and does not smooth anything. The ground camera's copy of this has always
    * run per reading; now they genuinely match.
    */
-  private advanceArrowHeading(raw: number): void {
+  private advanceArrowHeading(raw: number): boolean {
     if (this.smoothArrowHeading < 0) {
       this.smoothArrowHeading = raw;
-      return;
+      return true;
     }
     let diff = raw - this.smoothArrowHeading;
     if (diff > 180) diff -= 360;
     if (diff < -180) diff += 360;
     this.smoothArrowHeading = (this.smoothArrowHeading + diff * HEADING_SMOOTHING + 360) % 360;
+    return Math.abs(diff) > HEADING_STILL_DEG;
   }
 
   private updateHeadingArrow(cam: THREE.PerspectiveCamera): void {
