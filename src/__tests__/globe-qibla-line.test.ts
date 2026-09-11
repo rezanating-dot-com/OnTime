@@ -229,6 +229,22 @@ describe('User story: the qibla drawn on the globe already up', () => {
     expect(back.y).toBeCloseTo(1, 5);
   });
 
+  it('leaves the picture and the drag frame agreeing after a reset, with the line still up', () => {
+    const cam = harness.globe.cameraObj;
+    view.update({ ...data, qiblaMode: true } as never);
+
+    // Reset view and My location both put the camera upright. Doing that
+    // without telling the controls is the same defect as never rolling them,
+    // arrived at from the other side.
+    view.resetView();
+
+    expect(cam.up.y).toBeCloseTo(1, 5);
+    const carried = cam.up.clone().applyQuaternion(harness.globe.controls()._quat);
+    expect(carried.y).toBeCloseTo(1, 5);
+    expect(Math.abs(carried.x)).toBeLessThan(1e-5);
+    expect(Math.abs(carried.z)).toBeLessThan(1e-5);
+  });
+
   it('frames the middle of the line, not the user and not Makkah', () => {
     view.update({ ...data, qiblaMode: true } as never);
 

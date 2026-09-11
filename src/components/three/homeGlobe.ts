@@ -972,11 +972,14 @@ export class HomeGlobe {
   }
 
   /** Restore the camera's up vector to world-up and re-centre the orbit target.
-   *  Ground view tilts cam.up to the local radial direction; OrbitControls uses
-   *  object.up as its orbit axis, so if that tilt leaks out the whole orbit —
-   *  and every pointOfView() fly-in — renders tilted or upside-down. */
+   *  Ground view tilts cam.up to the local radial direction and qibla mode
+   *  rolls it along the line; OrbitControls uses object.up as its orbit axis,
+   *  so if either leaks out the whole orbit — and every pointOfView() fly-in —
+   *  renders tilted or upside-down. Through setCameraUp so the controls' own
+   *  cached copy of that axis is put back too, or the picture comes upright
+   *  while a drag stays rolled. */
   private resetOrbit(): void {
-    (this.globe.camera() as THREE.PerspectiveCamera).up.set(0, 1, 0);
+    this.setCameraUp(WORLD_UP);
     this.globe.controls().target.set(0, 0, 0);
   }
 
@@ -1014,7 +1017,7 @@ export class HomeGlobe {
   /** Fly the camera out to the moon so it fills the view, then allow spinning it. */
   focusOnMoon(): void {
     if (!this.moon) return;
-    (this.globe.camera() as THREE.PerspectiveCamera).up.set(0, 1, 0);
+    this.setCameraUp(WORLD_UP);
     const controls = this.globe.controls();
     const moonPos = this.moon.position.clone();
     // Camera at the moon height, offset horizontally toward Earth, so the
@@ -1210,7 +1213,7 @@ export class HomeGlobe {
     this.globe.controls().enabled = true;
     const cam = this.globe.camera() as THREE.PerspectiveCamera;
     cam.near = CAMERA_NEAR;
-    cam.up.set(0, 1, 0); // undo the ground-view radial tilt before re-enabling orbit
+    this.setCameraUp(WORLD_UP); // undo the ground-view radial tilt before re-enabling orbit
     cam.updateProjectionMatrix();
     if (this.pin) this.pin.visible = true;
     if (this.prayerLinesGroup) this.prayerLinesGroup.visible = true;
