@@ -4,47 +4,59 @@
 `PRIVACY_POLICY.md` — the privacy paragraph below is a summary of that file and
 the two must not drift.*
 
+## App Name (30 chars max)
+
+OnTime – Prayer Times & Qibla
+
+Twenty-nine of the thirty. Play searches the app name, and "OnTime" on its own
+says nothing about what the app is for; the rest of the line is the two words
+somebody actually types.
+
 ## Short Description (80 chars max)
 
-Prayer times, Qibla and travel mode. Works offline. No ads, no accounts.
+Prayer times, Qibla on a live globe. Works offline. No ads, no account.
+
+Seventy-one of the eighty. This is indexed for search as well as read, so it
+carries the two words people search for and the one thing no other prayer app
+does.
 
 ## Full Description
 
-OnTime gives you accurate Islamic prayer times for wherever you are, in an app
-that stays out of your way.
+Paste as-is. Play takes no formatting, so the bullets are real characters and
+the headings are plain capitals. 2,185 of the 4,000 characters.
 
-Everything is calculated on your phone. No account, no ads, no tracking, and
-nothing to sign up for.
+OnTime – Prayer Times & Qibla
+Accurate prayer times wherever in the world you are. No ads, no account, nothing to sign up for.
 
-FEATURES
+Everything is worked out on your phone. Your prayer times, the Qibla and the position of the sun are all calculated on the device — none of it needs a connection, and none of it is sent anywhere.
 
-- Accurate prayer times, calculated on your device, using the method you trust — ISNA, Muslim World League, Umm Al-Qura, Egyptian, Dubai, Karachi, Kuwait, Qatar, Singapore, Tehran, Turkey, or Moonsighting Committee
-- Hanafi and Shafi'i Asr calculation
-- A living globe for your home screen: real satellite imagery that works with no signal, the day and night sides of the Earth, and a line drawn across the world for each prayer, so you can see where in the world it is Fajr right now
-- Or a plain list, if that is what you want. Both light and dark, plus Desert, Rose, Forest and Ocean, and an Auto mode that turns dark at Maghrib
-- Qibla drawn on the globe itself: a line from where you are standing to the Kaaba, with a live compass telling you which way to turn
-- Countdown to the current and next prayer
-- Notifications before each prayer, with a real athan if you want one
-- Travel mode — noticed automatically when you are far from home, with shortened Qasr prayers and Jama' combinations
-- Jumu'ah support with your own khutbah time
-- Sunnah and Rawatib reminders for each fard prayer
-- Optional sunrise, middle of the night, and last third of the night
-- A second visual design, drawn around Islamic geometry
-- Works with no signal — every calculation is local
+WHAT YOU GET
+
+• Accurate prayer times using the method you trust — ISNA, Muslim World League, Umm Al-Qura, Egyptian, Dubai, Karachi, Kuwait, Qatar, Singapore, Tehran, Turkey or Moonsighting Committee
+• Hanafi and Shafi'i Asr calculation
+• A living globe for your home screen: real satellite imagery that works with no signal, the day and night sides of the Earth, and a line drawn across the world for each prayer — so you can see where in the world it is Fajr right now
+• Or a plain list, if that is what you would rather have
+• Qibla drawn on the globe itself: a line from where you are standing to the Kaaba, an arrow that follows your phone, and a buzz the moment you line up
+• Countdown to the current prayer and the next one
+• Notifications before each prayer, with a real athan if you want one
+• Travel mode, noticed automatically when you are far from home, with shortened Qasr prayers and Jama' combinations
+• Jumu'ah support with your own khutbah time
+• Sunnah and Rawatib reminders for each fard prayer
+• Optional sunrise, middle of the night and last third of the night
+• Light and dark, plus Desert, Rose, Forest and Ocean, and an Auto mode that turns dark at Maghrib
+• A second visual design, drawn around Islamic geometry
 
 PRIVACY
 
-OnTime has no account, no analytics, no advertising, and no third-party
-tracking. Prayer times, Qibla bearings and sun positions are all worked out on
-your device.
+No account. No analytics. No advertising. No third-party tracking. Nothing you do in the app is reported anywhere, because there is nowhere for it to be reported to — there is no server.
 
-Three things do reach the internet, and none of them is about you:
+Three things reach the internet, and none of them is about you:
 
-- your coordinates go to OpenStreetMap to turn them into a city name
-- the globe's satellite photo ships inside the app, so it needs no network at all until you zoom in; past that it streams sharper imagery from Esri, and those requests show roughly which part of the world you are looking at
-- athan recordings are downloaded from Assabile, only when you choose one
+• your coordinates go to OpenStreetMap to turn them into a city name
+• the globe's satellite photo ships inside the app and needs no connection at all; zoom a long way in and it streams sharper imagery from Esri
+• athan recordings download from Assabile, and only when you choose one
 
-Full detail, including how to avoid each one, is in the privacy policy.
+The full detail, including how to avoid each one, is in the privacy policy.
 
 ## Category
 
