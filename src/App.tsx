@@ -21,6 +21,7 @@ import { OnboardingScreen } from './components/OnboardingScreen';
 import { TravelPromptDialog } from './components/TravelPromptDialog';
 import { NotificationPermissionDialog } from './components/NotificationPermissionDialog';
 import { KaabaIcon } from './components/KaabaIcon';
+import { removeRetiredData } from './services/retiredData';
 
 const QiblaCompass = lazy(() => import('./components/QiblaCompass').then(m => ({ default: m.QiblaCompass })));
 const SettingsModal = lazy(() => import('./components/SettingsModal').then(m => ({ default: m.SettingsModal })));
@@ -51,6 +52,11 @@ function App() {
     Preferences.get({ key: ONBOARDING_KEY }).then(({ value }) => {
       setShowOnboarding(value !== 'true');
     });
+  }, []);
+
+  // Clear what a removed feature left behind. Nothing on screen waits for it.
+  useEffect(() => {
+    removeRetiredData();
   }, []);
 
   // Set up push notifications — but not until onboarding is done, so the OS
