@@ -9,7 +9,14 @@
         android:supportsRtl="true"
         android:theme="@style/AppTheme.NoActionBar">
 
+        <!-- Portrait only. The qibla is the reason: turning the phone turns the
+             compass reading and the globe's own framing with it, and the view
+             is composed for a screen that is far taller than it is wide, so a
+             landscape phone puts the line across the narrow way and throws the
+             arrow off. Nothing else in the app is laid out for landscape
+             either, so this is a lock rather than a special case. -->
         <activity
+            android:screenOrientation="portrait"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|density"
             android:name=".MainActivity"
             android:theme="@style/AppTheme.NoActionBarLaunch"
