@@ -22,12 +22,21 @@ does.
 
 ## Full Description
 
-Paste as-is. Play takes no formatting at all, so this uses none: no bullet
-characters, no dashes, nothing outside plain ASCII. Written that way
-deliberately after the console started refusing the listing without saying
-which field it disliked - when you cannot see the complaint, the cheapest move
-is to stop giving it anything to complain about. The structure is carried by
-line breaks and two plain capitalised headings instead.
+**Keep this plain ASCII.** No bullet characters, no em or en dashes, nothing
+above code point 127. This is not a style preference: a version of this
+description with bullets and dashes in it was rejected by the Play Console, and
+taking them out is what fixed it.
+
+The console gives you nothing to go on when it happens. It shows "some
+languages have errors" even when the listing has only one language, which reads
+like a translation problem and is not one, and it does not name the field. Every
+other thing worth checking was already in spec at the time: every field inside
+its limit, no emoji, no shouting capitals, all nine images the right size with
+no transparency.
+
+So the structure here is carried by line breaks and two plain capitalised
+headings. If a future edit wants bullets back, expect to spend an afternoon
+finding this out again.
 
 2,385 of the 4,000 characters.
 
