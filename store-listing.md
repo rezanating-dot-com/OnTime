@@ -56,6 +56,7 @@ prayer times, salah, islamic, muslim, qibla, adhan, ramadan, athan, namaz, praye
 
 ## Assets
 
+- **Feature graphic** — `docs/store/2026-09-10/feature-graphic.png`, 1024×500. The banner above the screenshots. Regenerate with `scripts/feature-graphic.mjs` after the screenshots, since it cuts the planet out of the first one.
 - **Phone screenshots** — `docs/store/2026-09-10/`, eight at 1080×1920: globe, prayer list, Qibla, travel mode in use, notifications, per-prayer reminders, settings, and the second visual design. Regenerate with `scripts/store-screenshots.mjs`; the README beside them says why each is in the set.
 - **Feature graphic** — 1024×500. **Not done.** Has to be designed; it cannot be screenshotted.
 - **Tablet screenshots** — only needed if the listing claims tablet support.
