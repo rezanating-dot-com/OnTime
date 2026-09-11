@@ -3,6 +3,7 @@ import { useLocation } from '../context/LocationContext';
 import { useSettings } from '../context/SettingsContext';
 import { twilightAnglesFor, asrShadowFactor as shadowFactorFor } from '../services/prayerService';
 import { useQibla } from '../hooks/useQibla';
+import { cardinalDirection } from '../utils/bearing';
 import { GlobeLoader, GLOBE_LOADER_FADE_MS } from './GlobeLoader';
 import type { PrayerTime } from '../types';
 import type { HomeGlobe } from './three/homeGlobe';
@@ -22,6 +23,9 @@ const HomeGlobeView = lazy(() =>
  * a blank rect.
  */
 const SPACE_BACKDROP = 'radial-gradient(ellipse at 50% 40%, #0d1424 0%, #03050a 70%)';
+
+/** How long to ask for a figure-8 before accepting there is no compass. */
+const COMPASS_PATIENCE_MS = 7000;
 
 /** Glass over the night sky, matching the HUD rather than the app's cards. */
 const CONTROL_CLASS = 'pointer-events-auto rounded-full px-3.5 py-2 text-[12.5px] font-medium leading-none';
@@ -47,7 +51,16 @@ const CONTROL_ACTIVE_STYLE: CSSProperties = {
  * day/night terminator, solar prayer lines. Purely visual — the header and
  * countdown HUD render on top of this as siblings in App.tsx, not inside it.
  */
-export function HomeGlobeScreen({ prayers, covered = false }: { prayers: PrayerTime[]; covered?: boolean }) {
+export function HomeGlobeScreen({
+  prayers,
+  covered = false,
+  qiblaMode = false,
+}: {
+  prayers: PrayerTime[];
+  covered?: boolean;
+  /** The line to the Kaaba, drawn on this globe. Toggled from the header. */
+  qiblaMode?: boolean;
+}) {
   const { location } = useLocation();
   const { settings } = useSettings();
   // The globe draws a ring per solar event, and those angles come from the
@@ -94,12 +107,14 @@ export function HomeGlobeScreen({ prayers, covered = false }: { prayers: PrayerT
 
   // Run the compass only while in ground view — and not under an overlay.
   useEffect(() => {
-    if (groundMode && !covered) startListening();
+    // Both ways of showing the qibla need the compass: the guidance below is
+    // the half that tells you which way to turn in the room.
+    if ((groundMode || qiblaMode) && !covered) startListening();
     else {
       stopListening();
       smoothRot.current = null;
     }
-  }, [groundMode, covered, startListening, stopListening]);
+  }, [groundMode, qiblaMode, covered, startListening, stopListening]);
 
   const onView = useCallback((view: HomeGlobe) => {
     viewRef.current = view;
@@ -113,9 +128,25 @@ export function HomeGlobeScreen({ prayers, covered = false }: { prayers: PrayerT
   // under StrictMode's double-render. Layout (not passive) effect: entering
   // ground view would otherwise paint one frame of the stale pre-toggle angle
   // before snapping to the real heading.
+  // "Sweep it in a figure-8" is good advice for a few seconds and wrong after
+  // that: a phone with no magnetometer never calibrates however long you wave
+  // it, and neither does a browser. Give it a while, then stop asking and let
+  // the bearing speak for itself.
+  const [askedLongEnough, setAskedLongEnough] = useState(false);
+  useEffect(() => {
+    // Once it has waited and heard nothing, it stays quiet for the rest of the
+    // session rather than asking again on every visit: a phone either has a
+    // magnetometer or it does not, and that does not change while the app is
+    // open. A reading arriving later still lights the guidance, because that
+    // path does not depend on this at all.
+    if (!(groundMode || qiblaMode) || accuracy >= 2) return;
+    const id = setTimeout(() => setAskedLongEnough(true), COMPASS_PATIENCE_MS);
+    return () => clearTimeout(id);
+  }, [groundMode, qiblaMode, accuracy]);
+
   useLayoutEffect(() => {
     let rawRot = 0;
-    if (groundMode && accuracy >= 2 && deviceHeading != null) {
+    if ((groundMode || qiblaMode) && accuracy >= 2 && deviceHeading != null) {
       rawRot = ((qiblaDirection - deviceHeading + 540) % 360) - 180;
     }
     if (smoothRot.current === null) smoothRot.current = rawRot;
@@ -127,7 +158,7 @@ export function HomeGlobeScreen({ prayers, covered = false }: { prayers: PrayerT
     }
     const next = Math.round(smoothRot.current);
     setRot((prev) => (prev === next ? prev : next));
-  }, [groundMode, accuracy, deviceHeading, qiblaDirection]);
+  }, [groundMode, qiblaMode, accuracy, deviceHeading, qiblaDirection]);
 
   return (
     // Not aria-hidden as a whole: the view controls below are real buttons, and
@@ -159,6 +190,7 @@ export function HomeGlobeScreen({ prayers, covered = false }: { prayers: PrayerT
             ishaIntervalMin: twilight.ishaIntervalMin,
             asrShadowFactor: shadowFactorFor(settings.asrCalculation),
             groundMode,
+            qiblaMode,
             deviceHeading,
             qiblaDirection,
           }}
@@ -201,23 +233,35 @@ export function HomeGlobeScreen({ prayers, covered = false }: { prayers: PrayerT
         </button>
       </div>
 
-      {/* Compass guidance while in ground view */}
-      {groundMode && (
+      {/* Which way to turn. The line on the globe says where Makkah is on the
+          Earth; this says where it is from where you are standing, and the two
+          together are what the separate Qibla page used to carry. Sat above
+          the view controls rather than over the countdown. */}
+      {(groundMode || qiblaMode) && (
         <div
-          className="pointer-events-none absolute top-[22%] left-1/2 z-10 -translate-x-1/2 rounded-full px-4 py-1.5 text-center text-sm font-medium"
+          className="pointer-events-none absolute inset-x-0 bottom-16 z-10 px-3 text-center"
           style={{ textShadow: '0 1px 8px rgba(0,0,0,0.9)' }}
         >
-          {error ? (
-            <span className="text-white/80">Compass unavailable — check location permission</span>
-          ) : accuracy < 2 ? (
-            <span className="text-white/80">Hold your phone flat · sweep it in a figure-8 to calibrate</span>
-          ) : Math.abs(rot) < 4 ? (
-            <span className="text-emerald-400">✓ Facing the Qibla</span>
-          ) : (
-            <span className="text-white/90">
-              Turn {Math.abs(rot)}° {rot > 0 ? 'right' : 'left'}
-            </span>
-          )}
+          <div className="text-base font-medium">
+            {error ? (
+              <span className="text-white/80">Compass unavailable — check location permission</span>
+            ) : accuracy < 2 ? (
+              askedLongEnough ? null : (
+                <span className="text-white/80">Hold the phone flat and sweep a figure-8</span>
+              )
+            ) : Math.abs(rot) < 4 ? (
+              <span className="text-emerald-400">✓ Facing the Qibla</span>
+            ) : (
+              <span className="text-white/90">
+                Turn {Math.abs(rot)}° {rot > 0 ? 'right' : 'left'}
+              </span>
+            )}
+          </div>
+          {/* The bearing itself, which is the one thing that stays true whether
+              or not the phone has a working compass. */}
+          <div className="mt-0.5 text-[12px] text-white/60">
+            Qibla {Math.round(qiblaDirection)}° {cardinalDirection(qiblaDirection)} from north
+          </div>
         </div>
       )}
 

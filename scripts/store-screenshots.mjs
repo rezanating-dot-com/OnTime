@@ -177,10 +177,15 @@ await shot('01-globe-home', {
 });
 await shot('02-prayer-times', { homeView: 'list', theme: 'light' });
 await shot('03-qibla', {
-  homeView: 'list',
+  // The qibla is drawn on the globe itself now rather than on a screen of its
+  // own, so this shot starts on the globe and turns the line on.
+  homeView: 'globe',
+  settle: 11000,
   after: async (page) => {
-    await page.locator('[aria-label="Open qibla compass"]').first().click();
-    await page.waitForTimeout(9000);
+    await page.locator('[aria-label="Show qibla direction"]').first().click();
+    // Long enough for the camera to settle and for the app to stop asking for
+    // a figure-8, which a browser with no magnetometer will never satisfy.
+    await page.waitForTimeout(9500);
   },
 });
 await shot('04-travel-mode', { homeView: 'list', travelling: true, theme: 'light' });

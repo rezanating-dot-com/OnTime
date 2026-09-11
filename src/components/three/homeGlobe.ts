@@ -30,6 +30,8 @@ export interface HomeGlobeData {
   asrShadowFactor: number;
   /** Ground-view (qibla) mode: camera drops to the user and follows the compass. */
   groundMode?: boolean;
+  /** Qibla mode: the line to the Kaaba drawn on the globe, seen from orbit. */
+  qiblaMode?: boolean;
   /** Device compass heading, degrees clockwise from true north (null = none). */
   deviceHeading?: number | null;
   /** Bearing to the Kaaba, degrees clockwise from true north. */
@@ -207,6 +209,23 @@ const GROUND_LINE_WIDTH_PX = 6;
 /** The 3D Kaaba endpoint, raised and scaled so it reads as a landmark. */
 const KAABA_ALTITUDE = 0.05;
 const KAABA_SCALE = 2.2;
+/** The same Kaaba seen from orbit rather than from the ground beside it. At
+ *  the ground-view scale it is a speck a few pixels across. */
+const KAABA_ORBIT_SCALE = 9;
+/**
+ * How far up the screen the ends of the line are allowed to reach, as a
+ * fraction of the distance from the middle to the edge. Kept well short of 1:
+ * the countdown sits over the top of the globe and the compass guidance over
+ * the bottom, and an end tucked behind either of those is an end you cannot
+ * see. Leaving the margin in degrees of the Earth's surface instead does
+ * almost nothing, because a point that far round is already near the limb and
+ * its position on screen barely moves.
+ */
+const QIBLA_FRAME_FILL = 0.65;
+/** Never closer than this, or a short line fills the screen and reads as a map. */
+const QIBLA_MIN_FRAME_ALTITUDE = 1;
+/** Never further than this, or the globe is a marble and the line is a hair. */
+const QIBLA_MAX_FRAME_ALTITUDE = 3.2;
 const GROUND_FLY_DURATION_MS = 900;
 /** Ground camera looks slightly down (tan of the pitch angle, ~12°). */
 const GROUND_PITCH = 0.21;
@@ -246,12 +265,24 @@ const NIGHT_SHADE_ALTITUDE = 0.005;
 const v3 = (p: Vec3 | { x: number; y: number; z: number }) =>
   new THREE.Vector3(p.x, p.y, p.z);
 
+/** World up. Shared read-only reference; never mutated. */
+const WORLD_UP = new THREE.Vector3(0, 1, 0);
+
 /** three-globe's lat/lng → cartesian convention (lon 0 on +z). */
 export function geo2xyz(lat: number, lon: number, r: number): { x: number; y: number; z: number } {
   const phi = (90 - lat) * D2R;
   const theta = (90 - lon) * D2R;
   const s = Math.sin(phi);
   return { x: r * s * Math.cos(theta), y: r * Math.cos(phi), z: r * s * Math.sin(theta) };
+}
+
+/** The inverse of geo2xyz, for a vector that is already a unit vector.
+ *  Longitude comes back in the usual -180..180, not the 0..360 the raw
+ *  arithmetic gives. */
+function xyz2geo(v: THREE.Vector3): { lat: number; lon: number } {
+  const phi = Math.acos(Math.min(1, Math.max(-1, v.y)));
+  const theta = Math.atan2(v.z, v.x);
+  return { lat: 90 - phi / D2R, lon: ((90 - theta / D2R + 540) % 360) - 180 };
 }
 
 /**
@@ -562,6 +593,7 @@ export class HomeGlobe {
   /** Live solar-line materials, so resize() can refresh their pixel widths. */
   private prayerLineMaterials: LineMaterial[] = [];
   private inGroundMode = false;
+  private inQiblaMode = false;
   /** Low-pass filtered compass heading (deg) to damp jitter. */
   private smoothHeading = -1;
   private groundFlyAnim: { start: number; from: THREE.Vector3; to: THREE.Vector3 } | null = null;
@@ -738,6 +770,11 @@ export class HomeGlobe {
   update(data: HomeGlobeData): void {
     this.data = data;
     if (!this.ready) return;
+    const wantQibla = !!data.qiblaMode && !data.groundMode;
+    if (wantQibla !== this.inQiblaMode) {
+      if (wantQibla) this.enterQiblaMode();
+      else this.exitQiblaMode();
+    }
     const wantGround = !!data.groundMode;
     if (wantGround !== this.inGroundMode) {
       if (wantGround) this.enterGroundMode();
@@ -1019,6 +1056,116 @@ export class HomeGlobe {
       .applyQuaternion(this.moonRot.clone().invert());
   }
 
+  // ── qibla mode (the line, seen from orbit) ────────────────────────────
+
+  /**
+   * The line to the Kaaba drawn across the globe you are already looking at,
+   * rather than on a screen of its own. This replaced a separate Qibla page
+   * that carried a second globe: a second WebGL context, its own copy of the
+   * world, and around 440ms of shader building every time it was opened.
+   */
+  private enterQiblaMode(): void {
+    this.inQiblaMode = true;
+    this.buildGroundLine(KAABA_ORBIT_SCALE);
+    this.groundGroup.visible = true;
+    this.frameQiblaLine();
+    this.renderThenSettle();
+  }
+
+  private exitQiblaMode(): void {
+    this.inQiblaMode = false;
+    this.groundGroup.visible = false;
+    this.clearGroundLine();
+    // Put the horizon back the way the rest of the globe expects it.
+    this.setCameraUp(WORLD_UP);
+    // Back to the framing the globe opens at, rather than leaving the user
+    // parked over the middle of an arc that is no longer drawn.
+    this.globe.pointOfView({ ...this.homePov }, 700);
+    this.markAdjusted(false);
+    this.renderThenSettle();
+  }
+
+  /**
+   * Roll the camera, and tell the controls about it.
+   *
+   * OrbitControls works out the axis it orbits around from the camera's up
+   * vector once, when it is built, and caches a pair of quaternions from it.
+   * It never looks again. So rolling the camera turns the picture on screen
+   * without turning the frame a drag is measured in, and the globe spins the
+   * wrong way under your finger. Refreshing that cached pair is what keeps
+   * the two in step.
+   *
+   * Reaching into the controls for it is deliberate and worth re-checking on
+   * a three.js upgrade: there is no public way to say "up has changed", and
+   * the alternative is a view whose gestures are reversed.
+   */
+  private setCameraUp(up: THREE.Vector3): void {
+    const cam = this.globe.camera() as THREE.PerspectiveCamera;
+    cam.up.copy(up);
+    const controls = this.globe.controls() as unknown as {
+      _quat?: THREE.Quaternion;
+      _quatInverse?: THREE.Quaternion;
+      update?: () => void;
+    };
+    if (controls._quat && controls._quatInverse) {
+      controls._quat.setFromUnitVectors(cam.up, WORLD_UP);
+      controls._quatInverse.copy(controls._quat).invert();
+    }
+    controls.update?.();
+  }
+
+  /**
+   * Look at the middle of the line, stand the line upright on the screen, and
+   * back off until both of its ends are inside the frame.
+   *
+   * Standing it upright is what makes this work on a phone. Held in portrait
+   * the camera sees about 25 degrees either side of centre vertically and
+   * only about 12 horizontally, and a line to Makkah is usually most of a
+   * quarter turn of the planet. Laid across the screen it needs the camera so
+   * far out that the Earth is a marble; stood on end it fits with the globe
+   * still filling the frame.
+   *
+   * The altitude is then the projection, not the horizon. A point an angle t
+   * from the point under the camera appears atan(sin t / ((1 + h) - cos t))
+   * off the view axis, so the altitude that brings it to a half-angle f is
+   * cos t + sin t / tan(f) - 1. Fitting to the horizon instead puts both ends
+   * on the visible face and both off the sides of the screen, which is
+   * exactly what the first attempt at this did.
+   */
+  private frameQiblaLine(): void {
+    const { latitude, longitude } = this.data;
+    const cam = this.globe.camera() as THREE.PerspectiveCamera;
+    // The globe's own frame, since the camera lives in it.
+    const a = v3(this.globe.getCoords(latitude, longitude, 1)).normalize();
+    const b = v3(this.globe.getCoords(MECCA.latitude, MECCA.longitude, 1)).normalize();
+
+    const span = a.angleTo(b);
+    // Standing in Makkah: no line, so leave the framing alone.
+    if (span < 1e-4) return;
+
+    const mid = a.clone().add(b).normalize();
+    // The arc lies in the plane of a and b, so its direction at the midpoint
+    // is the plane's normal turned a quarter turn about the view axis.
+    const normal = a.clone().cross(b).normalize();
+    const along = normal.clone().cross(mid).normalize();
+
+    const wanted = (cam.fov / 2) * QIBLA_FRAME_FILL * D2R;
+    const t = span / 2;
+    // Past a quarter turn the far end is behind the planet at any altitude.
+    const needed = t >= 89 * D2R
+      ? QIBLA_MAX_FRAME_ALTITUDE
+      : Math.cos(t) + Math.sin(t) / Math.tan(wanted) - 1;
+    const altitude = Math.min(QIBLA_MAX_FRAME_ALTITUDE, Math.max(QIBLA_MIN_FRAME_ALTITUDE, needed));
+
+    // Upright before the move, so the tween lands already oriented rather than
+    // rolling into place after it.
+    this.setCameraUp(along);
+
+    const geo = xyz2geo(mid);
+    this.globe.pointOfView({ lat: geo.lat, lng: geo.lon, altitude }, 900);
+    this.markAdjusted(true);
+  }
+
   // ── ground view (qibla) ───────────────────────────────────────────────
 
   private enterGroundMode(): void {
@@ -1136,8 +1283,12 @@ export class HomeGlobe {
     this.renderThenSettle();
   }
 
-  /** Draw the thick great-circle line from the user to the Kaaba + the 3D Kaaba. */
-  private buildGroundLine(): void {
+  /**
+   * Draw the thick great-circle line from the user to the Kaaba, and the Kaaba
+   * itself standing at the far end of it. Shared by the two ways of looking at
+   * the same line: from orbit, and from the ground beside it.
+   */
+  private buildGroundLine(kaabaScale = KAABA_SCALE): void {
     this.clearGroundLine();
     const { latitude, longitude } = this.data;
     const radius = GLOBE_RADIUS * (1 + GROUND_LINE_ALTITUDE);
@@ -1165,7 +1316,7 @@ export class HomeGlobe {
 
     // The 3D Kaaba at the line's end point, standing on the surface at Makkah.
     const kaabaModel = buildKaabaModel();
-    kaabaModel.scale.setScalar(KAABA_SCALE);
+    kaabaModel.scale.setScalar(kaabaScale);
     const kaabaPos = v3(this.globe.getCoords(MECCA.latitude, MECCA.longitude, KAABA_ALTITUDE));
     kaabaModel.position.copy(kaabaPos);
     kaabaModel.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), kaabaPos.clone().normalize());
@@ -1473,8 +1624,11 @@ export class HomeGlobe {
     this.prayerLinesGroup.renderOrder = 3;
     scene.add(this.prayerLinesGroup);
 
-    // Ground-view qibla line + Kaaba marker
+    // The line to the Kaaba and the Kaaba itself, shown either from orbit
+    // (qibla mode) or from the ground beside it (ground view). Named so the
+    // scene graph is readable from a debugger and from a test.
     this.groundGroup = new THREE.Group();
+    this.groundGroup.name = 'qibla';
     this.groundGroup.renderOrder = 4;
     this.groundGroup.visible = false;
     scene.add(this.groundGroup);

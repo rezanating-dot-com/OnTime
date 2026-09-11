@@ -1,9 +1,7 @@
 import { useCallback, useEffect, useRef, type CSSProperties } from 'react';
 import { needsRelativePosition } from '../../utils/layout';
 import { SunDome, type SunDomeData } from './sunDome';
-import { QiblaGlobe, type QiblaGlobeData } from './qiblaGlobe';
 import { HomeGlobe, type HomeGlobeData } from './homeGlobe';
-import { KaabaMini } from './kaabaMini';
 
 /**
  * React hosts for the WebGL views. Everything three.js is reachable only
@@ -134,15 +132,6 @@ export function SunDomeView(props: { data: SunDomeData; className?: string; styl
   return <SceneHost Scene={SunDome} {...props} />;
 }
 
-export function QiblaGlobeView(props: {
-  data: QiblaGlobeData;
-  className?: string;
-  style?: CSSProperties;
-  fallback?: React.ReactNode;
-}) {
-  return <SceneHost Scene={QiblaGlobe} {...props} />;
-}
-
 export function HomeGlobeView(props: {
   data: HomeGlobeData;
   className?: string;
@@ -163,9 +152,4 @@ export function HomeGlobeView(props: {
   );
 }
 
-export function KaabaMiniView(props: { className?: string; style?: CSSProperties }) {
-  // A 96px decorative card: a "Reset view" button lands on top of the Kaaba.
-  return <SceneHost Scene={KaabaMini} data={undefined as void} {...props} hideControls />;
-}
-
-export type { SunDomeData, QiblaGlobeData, HomeGlobeData };
+export type { SunDomeData, HomeGlobeData };
