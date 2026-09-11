@@ -186,8 +186,10 @@ describe('User story: the qibla drawn on the globe already up', () => {
     // Close enough that where you are is a place rather than a dot, far enough
     // that the line has somewhere to go. Framing both ends instead meant
     // backing off until the planet was a marble, which is what this replaced.
-    expect(framed.altitude).toBeGreaterThan(0.8);
-    expect(framed.altitude).toBeLessThan(2);
+    expect(framed.altitude).toBeGreaterThan(1.2);
+    // No further out than the globe's own opening framing: turning the qibla
+    // on should bring you closer to where you are, never push you away.
+    expect(framed.altitude).toBeLessThanOrEqual(2.5);
   });
 
   it('stands the line upright on the screen, and lays the horizon back flat after', () => {
