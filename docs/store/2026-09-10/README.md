@@ -15,7 +15,7 @@ sub-menu that only makes sense once you already own it.
 
 | File | Screen | What it has to prove |
 |---|---|---|
-| `01-globe-home` | Globe home | The thing nothing else in this category has. A line drawn across the world for each prayer. Leads the listing. |
+| `01-globe-home` | Globe home | The thing nothing else in this category has. A line drawn across the world for each prayer. Pulled back far enough for the whole planet to sit in frame, and taken from Mecca at sunrise so day and night are both in shot. Leads the listing. |
 | `02-prayer-times` | Prayer list, light | The daily screen, with the Sunnah counts beside each prayer. Also proves there is a light theme. |
 | `03-qibla` | Qibla direction | Named in the short description, so it has to be seen. Shows the great-circle arc, not just a needle. |
 | `04-travel-mode` | Travel mode in use | Qasr and Jama' shown working, with a real distance from home. The feature most competitors do not have. |
@@ -40,6 +40,12 @@ one starts from a real city with onboarding already done.
 
 The travel shot puts home in Toronto and the user in Istanbul, so the banner
 shows a real distance and the list shows Dhuhr and Asr genuinely combined.
+
+The globe shot is the one that depends on **when** it is run. It sits in Mecca
+and zooms out, and the day/night line only crosses the visible face while Mecca
+is near sunrise or sunset. Run it at the wrong hour and you get a fully lit
+disc or a fully dark one, which loses the whole point of the shot. Look at it
+before keeping it.
 
 ## Still to do before a listing update
 
