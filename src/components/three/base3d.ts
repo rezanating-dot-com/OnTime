@@ -271,6 +271,12 @@ export abstract class Base3D<TData = unknown> {
       else if (m) disposeMaterial(m);
     });
     this.renderer?.dispose();
+    // Dropping the JavaScript objects is not enough. The WebGL context holds
+    // its own allocation in the GPU driver, and on Android that allocation
+    // survives dispose() and the canvas being removed — every open of a scene
+    // that had been closed added its whole graphics cost again, permanently.
+    // Losing the context is what actually hands the memory back.
+    this.renderer?.forceContextLoss();
     this.renderer?.domElement?.remove();
   }
 
