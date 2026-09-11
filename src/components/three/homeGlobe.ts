@@ -212,6 +212,14 @@ const GROUND_LINE_WIDTH_PX = 6;
 /** The 3D Kaaba endpoint, raised and scaled so it reads as a landmark. */
 const KAABA_ALTITUDE = 0.05;
 const KAABA_SCALE = 2.2;
+/**
+ * How much of each new compass reading to take. Applied once per reading, so
+ * it settles in a handful of readings whatever the frame rate — the arrow used
+ * to advance this on every drawn frame, which at 90 a second converged inside a
+ * twentieth of a second and smoothed nothing.
+ */
+const HEADING_SMOOTHING = 0.22;
+
 /** The same Kaaba seen from orbit rather than from the ground beside it. At
  *  the ground-view scale it is a speck a few pixels across. */
 const KAABA_ORBIT_SCALE = 9;
@@ -807,6 +815,7 @@ export class HomeGlobe {
     this.data = data;
     if (!this.ready) return;
     this.setMarkerArrow(!!data.qiblaMode && !!data.headingCalibrated && !data.groundMode);
+    if (this.showingArrow) this.advanceArrowHeading(data.deviceHeading ?? 0);
     const wantQibla = !!data.qiblaMode && !data.groundMode;
     if (wantQibla !== this.inQiblaMode) {
       if (wantQibla) this.enterQiblaMode();
@@ -1289,8 +1298,10 @@ export class HomeGlobe {
     }
   }
 
-  // Scratch vectors for the ground view — applyGroundOrientation runs at
-  // compass rate, so no per-call allocations.
+  // Scratch vectors for the local compass basis, shared by the ground camera
+  // and the heading arrow. Both run at compass rate, so no per-call
+  // allocations. Only one of the two is ever on at a time, which is what makes
+  // sharing these safe: if that ever stops being true, they need splitting.
   /** The marker's two faces: a dot normally, an arrow while the qibla is up. */
   private dotTexture?: THREE.Texture;
   private arrowTexture?: THREE.Texture;
@@ -1336,7 +1347,7 @@ export class HomeGlobe {
       let diff = raw - this.smoothHeading;
       if (diff > 180) diff -= 360;
       if (diff < -180) diff += 360;
-      this.smoothHeading = (this.smoothHeading + diff * 0.22 + 360) % 360;
+      this.smoothHeading = (this.smoothHeading + diff * HEADING_SMOOTHING + 360) % 360;
     }
     const facing = this.facingAt(up, this.smoothHeading, this.groundFacing);
     cam.up.copy(up);
@@ -1390,18 +1401,29 @@ export class HomeGlobe {
    * Runs per frame off the sprite's own render hook, because it depends on the
    * camera as much as on the compass.
    */
+  /**
+   * Take one compass reading into the arrow's smoothed heading, by the shortest
+   * way round the circle.
+   *
+   * Called where readings arrive rather than where the arrow is drawn. Drawn is
+   * the tempting place, since that is where the angle is wanted, but a filter
+   * advanced once a frame settles in a twentieth of a second on a fast screen
+   * and does not smooth anything. The ground camera's copy of this has always
+   * run per reading; now they genuinely match.
+   */
+  private advanceArrowHeading(raw: number): void {
+    if (this.smoothArrowHeading < 0) {
+      this.smoothArrowHeading = raw;
+      return;
+    }
+    let diff = raw - this.smoothArrowHeading;
+    if (diff > 180) diff -= 360;
+    if (diff < -180) diff += 360;
+    this.smoothArrowHeading = (this.smoothArrowHeading + diff * HEADING_SMOOTHING + 360) % 360;
+  }
+
   private updateHeadingArrow(cam: THREE.PerspectiveCamera): void {
     if (!this.showingArrow || !this.pin) return;
-    const raw = this.data.deviceHeading ?? 0;
-    // Same shortest-arc low pass as the ground view, or the arrow twitches
-    // with every noisy magnetometer read.
-    if (this.smoothArrowHeading < 0) this.smoothArrowHeading = raw;
-    else {
-      let diff = raw - this.smoothArrowHeading;
-      if (diff > 180) diff -= 360;
-      if (diff < -180) diff += 360;
-      this.smoothArrowHeading = (this.smoothArrowHeading + diff * 0.22 + 360) % 360;
-    }
 
     const up = this.arrowUp.copy(this.pin.position).normalize();
     const facing = this.facingAt(up, this.smoothArrowHeading, this.arrowFacing);

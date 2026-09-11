@@ -49,7 +49,10 @@ vi.mock('globe.gl', async () => {
     };
     private rendererObj = {
       domElement: document.createElement('canvas'),
-      getSize: (v: THREE.Vector2) => v.set(800, 600),
+      // The shape of the phone this is aimed at, not a 4:3 desktop frame: the
+      // skew that a tall screen puts on every measured angle is the whole
+      // reason the arrow's angle is worked out in pixels.
+      getSize: (v: THREE.Vector2) => v.set(448, 997),
       render: () => {},
       dispose: () => {},
       forceContextLoss: () => {},
@@ -347,6 +350,27 @@ describe('User story: the marker that shows which way I am facing', () => {
     expect((marker().material as THREE.SpriteMaterial).rotation).toBeCloseTo(0, 3);
   });
 
+  it('settles towards a new heading once per reading, not once per drawn frame', () => {
+    view.update({ ...data, qiblaMode: true, deviceHeading: 0, headingCalibrated: true } as never);
+    draw();
+
+    // One reading of a heading a quarter turn away: the arrow should start
+    // easing towards it.
+    view.update({ ...data, qiblaMode: true, deviceHeading: 90, headingCalibrated: true } as never);
+    const afterOneReading = draw();
+    for (let i = 0; i < 10; i++) draw();
+    const afterTenMoreFrames = draw();
+
+    // Drawing the same state again is not the same as hearing from the
+    // compass again. Advanced per frame, the easing would be finished by now
+    // and would smooth nothing on a fast screen.
+    expect(afterTenMoreFrames).toBeCloseTo(afterOneReading, 9);
+
+    // A second reading does move it on.
+    view.update({ ...data, qiblaMode: true, deviceHeading: 90, headingCalibrated: true } as never);
+    expect(Math.abs(draw() - afterOneReading)).toBeGreaterThan(0.01);
+  });
+
   it('turns the arrow right round when the phone turns right round', () => {
     view.update({ ...data, qiblaMode: true, deviceHeading: 0, headingCalibrated: true } as never);
     const north = draw();
@@ -371,9 +395,9 @@ describe('User story: the marker that shows which way I am facing', () => {
     view.update({ ...data, qiblaMode: true, deviceHeading: 90, headingCalibrated: true } as never);
     const east = draw();
 
-    // Not a quarter turn on screen to the decimal — the frame is taller than
-    // it is wide and that skews every angle but a reversal — but nowhere near
-    // standing still either.
+    // Not a quarter turn on screen to the decimal: the frame is more than
+    // twice as tall as it is wide, and that skews every angle but a reversal.
+    // Nowhere near standing still either.
     const apart = Math.abs(((east - north + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
     expect(apart).toBeGreaterThan(0.8);
     expect(apart).toBeLessThan(2.4);
