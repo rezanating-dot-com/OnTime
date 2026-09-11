@@ -9,6 +9,7 @@ import { SettingsProvider, useSettings } from '../context/SettingsContext';
 import { LocationProvider } from '../context/LocationContext';
 import { TravelProvider } from '../context/TravelContext';
 import type { Settings } from '../types';
+import pkg from '../../package.json';
 
 /**
  * SettingsModal's own draft state, and the settings writes it makes. The
@@ -123,11 +124,15 @@ describe('About screen version (ST-10)', () => {
     await act(async () => { renderModal(); });
     await user.click(await screen.findByText('About'));
 
-    // Hardcoded "1.0.0" in two places while package.json and build.gradle both
-    // say 1.8.0 — so a user quoting a version in a review or a support mail
-    // quotes one that never shipped.
+    // This screen once carried "1.0.0" written into it by hand, while the rest
+    // of the app shipped as something else entirely — so a user quoting a
+    // version in a review or a support mail quoted one that never existed.
+    //
+    // Read from package.json rather than written here, because a version
+    // written here is the same mistake one file along: it went stale the first
+    // time the app was released after this test was added, and shipped red.
     expect(screen.queryByText(/Version 1\.0\.0/)).not.toBeInTheDocument();
-    expect(await screen.findByText(/Version 1\.8\.0/)).toBeInTheDocument();
+    expect(await screen.findByText(`Version ${pkg.version}`)).toBeInTheDocument();
   });
 });
 
