@@ -179,17 +179,24 @@ describe('User story: the qibla drawn on the globe already up', () => {
     expect(qiblaGroup().children.length).toBe(0);
   });
 
-  it('stands far enough off to show the ground around you, and no further', () => {
+  it('moves the camera nowhere at all', () => {
+    const cam = harness.globe.cameraObj;
+    cam.position.set(0, 0, 420);
+    const before = cam.position.clone();
+    harness.povs = [];
+
     view.update({ ...data, qiblaMode: true } as never);
 
-    const framed = harness.povs.at(-1)!;
-    // Close enough that where you are is a place rather than a dot, far enough
-    // that the line has somewhere to go. Framing both ends instead meant
-    // backing off until the planet was a marble, which is what this replaced.
-    expect(framed.altitude).toBeGreaterThan(1.2);
-    // No further out than the globe's own opening framing: turning the qibla
-    // on should bring you closer to where you are, never push you away.
-    expect(framed.altitude).toBeLessThanOrEqual(2.5);
+    // Asking which way to face is not asking to be thrown to a new distance.
+    // Two earlier goes at this flew somewhere — to the middle of the line, and
+    // then over the user — and both were a zoom as well as a turn.
+    expect(harness.povs).toHaveLength(0);
+    expect(cam.position.distanceTo(before)).toBe(0);
+
+    view.update({ ...data, qiblaMode: false } as never);
+
+    expect(harness.povs).toHaveLength(0);
+    expect(cam.position.distanceTo(before)).toBe(0);
   });
 
   it('stands the line upright on the screen, and lays the horizon back flat after', () => {
@@ -251,12 +258,15 @@ describe('User story: the qibla drawn on the globe already up', () => {
     expect(Math.abs(carried.z)).toBeLessThan(1e-5);
   });
 
-  it('looks at where you are standing, not at the middle of the line', () => {
+  it('leaves the globe wherever it was left, however far that is from you', () => {
+    // Dragged round to look at somewhere else entirely.
+    const cam = harness.globe.cameraObj;
+    cam.position.set(300, 120, -260);
+    const before = cam.position.clone();
+
     view.update({ ...data, qiblaMode: true } as never);
 
-    const framed = harness.povs.at(-1)!;
-    expect(framed.lat).toBeCloseTo(data.latitude, 4);
-    expect(framed.lng).toBeCloseTo(data.longitude, 4);
+    expect(cam.position.distanceTo(before)).toBe(0);
   });
 });
 

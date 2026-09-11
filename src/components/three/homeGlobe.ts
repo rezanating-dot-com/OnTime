@@ -43,7 +43,10 @@ export interface HomeGlobeData {
 
 // All distances are in globe-radius units (globe.gl uses a 100-unit globe).
 export const GLOBE_RADIUS = 100;
-const HOME_ALTITUDE = 2.5; // default framing
+/** Default framing: the whole planet in the frame with sky around it, rather
+ *  than an Earth that runs off all four edges. Set from a measurement of the
+ *  view the app's owner pinched to and asked for. */
+const HOME_ALTITUDE = 4.4;
 const FOCUS_ALTITUDE = 0.5; // "My location" fly-in
 const MIN_ALTITUDE = 0.06; // pinch floor, just above the atmosphere
 const MAX_DISTANCE = 3500;
@@ -232,17 +235,7 @@ const HEADING_STILL_DEG = 0.15;
 
 /** On-screen height of the Kaaba pin, held constant at every zoom. */
 const KAABA_PIN_PX = 80;
-/**
- * Where the camera sits when the qibla comes up.
- *
- * Over the user, not over the middle of the line. Framing both ends at once
- * meant backing off until the planet was small and the place you are standing
- * was a dot near the bottom edge — the Kaaba is most of a quarter turn away
- * for most of the world, and there is no altitude that shows both ends and
- * still shows where you are. The line leaves the middle of the screen and runs
- * off the top, which is the direction, which is the question being asked.
- */
-const QIBLA_FOCUS_ALTITUDE = 2;
+
 const GROUND_FLY_DURATION_MS = 900;
 /** Ground camera looks slightly down (tan of the pitch angle, ~12°). */
 const GROUND_PITCH = 0.21;
@@ -291,15 +284,6 @@ export function geo2xyz(lat: number, lon: number, r: number): { x: number; y: nu
   const theta = (90 - lon) * D2R;
   const s = Math.sin(phi);
   return { x: r * s * Math.cos(theta), y: r * Math.cos(phi), z: r * s * Math.sin(theta) };
-}
-
-/** The inverse of geo2xyz, for a vector that is already a unit vector.
- *  Longitude comes back in the usual -180..180, not the 0..360 the raw
- *  arithmetic gives. */
-function xyz2geo(v: THREE.Vector3): { lat: number; lon: number } {
-  const phi = Math.acos(Math.min(1, Math.max(-1, v.y)));
-  const theta = Math.atan2(v.z, v.x);
-  return { lat: 90 - phi / D2R, lon: ((90 - theta / D2R + 540) % 360) - 180 };
 }
 
 /**
@@ -736,9 +720,6 @@ export class HomeGlobe {
   private prayerLineMaterials: LineMaterial[] = [];
   private inGroundMode = false;
   private inQiblaMode = false;
-  /** Where the camera was before the qibla took it somewhere else. */
-  private povBeforeQibla: { lat: number; lng: number; altitude: number } | null = null;
-  private adjustedBeforeQibla = false;
   /** Low-pass filtered compass heading (deg) to damp jitter. */
   private smoothHeading = -1;
   private groundFlyAnim: { start: number; from: THREE.Vector3; to: THREE.Vector3 } | null = null;
@@ -1229,15 +1210,6 @@ export class HomeGlobe {
    */
   private enterQiblaMode(): void {
     this.inQiblaMode = true;
-    // Read off the camera rather than asked of pointOfView, which lags its own
-    // transition. Someone who had turned the globe to look at Japan should get
-    // Japan back, not be dropped on their own city.
-    const cam = this.globe.camera() as THREE.PerspectiveCamera;
-    const here = cam.position.clone();
-    const altitude = here.length() / GLOBE_RADIUS - 1;
-    const geo = xyz2geo(here.normalize());
-    this.povBeforeQibla = { lat: geo.lat, lng: geo.lon, altitude };
-    this.adjustedBeforeQibla = this.adjusted;
     this.buildGroundLine(true);
     this.groundGroup.visible = true;
     this.frameQiblaLine();
@@ -1248,13 +1220,10 @@ export class HomeGlobe {
     this.inQiblaMode = false;
     this.groundGroup.visible = false;
     this.clearGroundLine();
-    // Put the horizon back the way the rest of the globe expects it.
+    // Put the horizon back the way the rest of the globe expects it, and
+    // nothing else: nothing moved on the way in, so nothing moves on the way
+    // out either.
     this.setCameraUp(WORLD_UP);
-    // Back where they were before, rather than parked over the middle of an
-    // arc that is no longer drawn.
-    this.globe.pointOfView({ ...(this.povBeforeQibla ?? this.homePov) }, 700);
-    this.markAdjusted(this.povBeforeQibla ? this.adjustedBeforeQibla : false);
-    this.povBeforeQibla = null;
     this.renderThenSettle();
   }
 
@@ -1291,10 +1260,15 @@ export class HomeGlobe {
   }
 
   /**
-   * Put the camera over where you are standing, and stand the line upright on
-   * the screen so it leaves your own position and runs off the top.
+   * Stand the line upright on the screen, and move nothing else.
    *
-   * Upright is what makes this work on a phone. Held in portrait the camera
+   * Turning the qibla on used to fly the camera somewhere — first to the
+   * middle of the line, then over the user. Both were a zoom as well as a
+   * turn, and being thrown to a new distance is not what asking which way to
+   * face is asking for. The globe stays exactly where it was left; only the
+   * horizon turns, so the line runs up the screen instead of across it.
+   *
+   * Upright is what makes it readable on a phone. Held in portrait the camera
    * sees about 25 degrees either side of centre vertically and only about 12
    * horizontally, so a line laid across the screen runs out of frame in a
    * quarter of the distance that one stood on end does.
@@ -1314,11 +1288,7 @@ export class HomeGlobe {
     const normal = a.clone().cross(b).normalize();
     const along = normal.clone().cross(a).normalize();
 
-    // Upright before the move, so the tween lands already oriented rather than
-    // rolling into place after it.
     this.setCameraUp(along);
-    this.globe.pointOfView({ lat: latitude, lng: longitude, altitude: QIBLA_FOCUS_ALTITUDE }, 900);
-    this.markAdjusted(true);
   }
 
   // ── ground view (qibla) ───────────────────────────────────────────────
