@@ -84,6 +84,8 @@ describe('User story: tapping a prayer that has already been', () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(50); });
 
     await act(async () => { screen.getByText('Asr').click(); });
+    // 14:00 to 15:41 is 1h 41m, less the 50ms settled above, and the countdown
+    // floors to whole minutes. Hence 40 rather than 41.
     expect(screen.getByText('1h 40m left')).toBeInTheDocument();
   });
 
