@@ -49,8 +49,12 @@ import { mkdirSync } from 'fs';
 const OUT = process.argv[2] ?? 'store-shots';
 mkdirSync(OUT, { recursive: true });
 
-const TORONTO = { latitude: 43.6532, longitude: -79.3832 };
-const ISTANBUL = { latitude: 41.0082, longitude: 28.9784 };
+const TORONTO = { coords: { latitude: 43.6532, longitude: -79.3832 }, city: 'Toronto', country: 'CA', tz: 'America/Toronto' };
+const ISTANBUL = { coords: { latitude: 41.0082, longitude: 28.9784 }, city: 'Istanbul', country: 'TR', tz: 'Europe/Istanbul' };
+// The globe shot's home. Chosen for the terminator: run this while Mecca is
+// near sunrise and the day and night halves of the Earth both sit in frame,
+// with the city on the line between them. See the note on the shot itself.
+const MECCA = { coords: { latitude: 21.4225, longitude: 39.8262 }, city: 'Mecca', country: 'SA', tz: 'Asia/Riyadh' };
 
 function settings({ homeView = 'list', designStyle = 'classic', travelling = false }) {
   return JSON.stringify({
@@ -101,9 +105,8 @@ const browser = await chromium.launch({
 
 async function shot(name, opts) {
   const { theme = 'dark', travelling = false, settle = 4000, after } = opts;
-  const coords = travelling ? ISTANBUL : TORONTO;
-  const city = travelling ? 'Istanbul' : 'Toronto';
-  const country = travelling ? 'TR' : 'CA';
+  const place = opts.place ?? (travelling ? ISTANBUL : TORONTO);
+  const { coords, city, country } = place;
 
   const ctx = await browser.newContext({
     viewport: { width: 432, height: 768 },
@@ -111,7 +114,7 @@ async function shot(name, opts) {
     isMobile: true,
     hasTouch: true,
     permissions: [],
-    timezoneId: travelling ? 'Europe/Istanbul' : 'America/Toronto',
+    timezoneId: place.tz,
     locale: 'en-US',
     colorScheme: theme === 'light' ? 'light' : 'dark',
   });
@@ -151,7 +154,27 @@ const openSetting = (title) => async (page) => {
   }
 };
 
-await shot('01-globe-home', { homeView: 'globe', settle: 11000 });
+await shot('01-globe-home', {
+  homeView: 'globe',
+  place: MECCA,
+  settle: 11000,
+  // Two things the default framing does not give you. The globe opens close
+  // enough that the Earth fills the frame edge to edge, which reads as a map
+  // rather than as a planet, so pull back until the whole disc and its
+  // atmosphere are inside the shot. And the day and night sides only both
+  // appear when the camera is over the line between them, which is why this
+  // one shot is taken from Mecca near sunrise rather than from Toronto.
+  after: async (page) => {
+    await page.locator('canvas').first().hover();
+    // Nine notches. Seven leaves the disc clipped at the left edge; eleven
+    // leaves so much empty sky that the planet reads as small.
+    for (let i = 0; i < 9; i++) {
+      await page.mouse.wheel(0, 120);
+      await page.waitForTimeout(120);
+    }
+    await page.waitForTimeout(4000);
+  },
+});
 await shot('02-prayer-times', { homeView: 'list', theme: 'light' });
 await shot('03-qibla', {
   homeView: 'list',
