@@ -255,3 +255,127 @@ describe('User story: the qibla drawn on the globe already up', () => {
     expect(framed.lat).toBeGreaterThan(30);
   });
 });
+
+/**
+ * User story: the dot where I am becomes an arrow showing which way I face.
+ *
+ * A dot tells you where you are, which you knew. Turned into an arrow that
+ * follows the phone, it tells you which way you are pointing — and lining it up
+ * with the line to the Kaaba is the whole job, without having to read a number.
+ *
+ * The marker is a sprite, always square to the camera, so the arrow is turned
+ * in screen space: the facing direction is taken into the world at the
+ * marker's own position, projected, and the sprite turned by the angle that
+ * comes back. That keeps it right however the globe has been turned or rolled,
+ * where an arrow laid flat on the surface would be squashed to a line near the
+ * edge of the disc.
+ */
+describe('User story: the marker that shows which way I am facing', () => {
+  const marker = () => harness.globe.sceneObj.getObjectByName('location') as THREE.Sprite;
+
+  /** Stand in for a frame: the rotation is worked out as the marker is drawn. */
+  const draw = () => {
+    const cam = harness.globe.cameraObj;
+    cam.position.copy(marker().position).multiplyScalar(3);
+    cam.lookAt(0, 0, 0);
+    cam.updateMatrixWorld(true);
+    marker().onBeforeRender(
+      null as never, null as never, cam, null as never, marker().material, null as never,
+    );
+    return (marker().material as THREE.SpriteMaterial).rotation;
+  };
+
+  it('stays a plain dot while the qibla is not up', () => {
+    const dot = (marker().material as THREE.SpriteMaterial).map;
+
+    view.update({ ...data, deviceHeading: 30, headingCalibrated: true } as never);
+
+    expect((marker().material as THREE.SpriteMaterial).map).toBe(dot);
+  });
+
+  it('stays a plain dot while the reading cannot be trusted', () => {
+    const dot = (marker().material as THREE.SpriteMaterial).map;
+
+    // An arrow pointing at noise is worse than no arrow.
+    view.update({ ...data, qiblaMode: true, deviceHeading: 30, headingCalibrated: false } as never);
+
+    expect((marker().material as THREE.SpriteMaterial).map).toBe(dot);
+  });
+
+  it('becomes an arrow once the qibla is up and the reading has settled', () => {
+    const dot = (marker().material as THREE.SpriteMaterial).map;
+
+    view.update({ ...data, qiblaMode: true, deviceHeading: 30, headingCalibrated: true } as never);
+
+    expect((marker().material as THREE.SpriteMaterial).map).not.toBe(dot);
+  });
+
+  it('goes back to the dot when the qibla is switched off', () => {
+    const dot = (marker().material as THREE.SpriteMaterial).map;
+    view.update({ ...data, qiblaMode: true, deviceHeading: 30, headingCalibrated: true } as never);
+    expect((marker().material as THREE.SpriteMaterial).map).not.toBe(dot);
+
+    view.update({ ...data, qiblaMode: false } as never);
+
+    expect((marker().material as THREE.SpriteMaterial).map).toBe(dot);
+    expect((marker().material as THREE.SpriteMaterial).rotation).toBe(0);
+  });
+
+  it('rests pointing the way the phone points, not a quarter or a half turn off it', () => {
+    // On the equator at longitude zero, with the camera straight above and the
+    // world's north up the screen, a phone pointing north is a phone pointing
+    // up the screen. So the sprite should not be turned at all.
+    //
+    // This is the assertion that was missing when the arrow first shipped
+    // pointing backwards: every other term was right, and the constant that
+    // relates the drawn shape to the measured angle was guessed rather than
+    // measured.
+    view.update({
+      ...data, latitude: 0, longitude: 0,
+      qiblaMode: true, deviceHeading: 0, headingCalibrated: true,
+    } as never);
+
+    const cam = harness.globe.cameraObj;
+    cam.position.set(0, 0, 600);
+    cam.up.set(0, 1, 0);
+    cam.lookAt(0, 0, 0);
+    cam.updateMatrixWorld(true);
+    marker().onBeforeRender(
+      null as never, null as never, cam, null as never, marker().material, null as never,
+    );
+
+    expect((marker().material as THREE.SpriteMaterial).rotation).toBeCloseTo(0, 3);
+  });
+
+  it('turns the arrow right round when the phone turns right round', () => {
+    view.update({ ...data, qiblaMode: true, deviceHeading: 0, headingCalibrated: true } as never);
+    const north = draw();
+
+    // Off and on again, so the smoothing starts from the new heading rather
+    // than easing towards it over the next fifty frames.
+    view.update({ ...data, qiblaMode: false } as never);
+    view.update({ ...data, qiblaMode: true, deviceHeading: 180, headingCalibrated: true } as never);
+    const south = draw();
+
+    // Half a turn on the phone is half a turn on screen, exactly, whatever the
+    // shape of the screen: reversing a direction reverses its projection.
+    const apart = Math.abs(((south - north + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
+    expect(Math.PI - apart).toBeLessThan(0.02);
+  });
+
+  it('turns the arrow by a quarter when the phone turns by a quarter', () => {
+    view.update({ ...data, qiblaMode: true, deviceHeading: 0, headingCalibrated: true } as never);
+    const north = draw();
+
+    view.update({ ...data, qiblaMode: false } as never);
+    view.update({ ...data, qiblaMode: true, deviceHeading: 90, headingCalibrated: true } as never);
+    const east = draw();
+
+    // Not a quarter turn on screen to the decimal — the frame is taller than
+    // it is wide and that skews every angle but a reversal — but nowhere near
+    // standing still either.
+    const apart = Math.abs(((east - north + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
+    expect(apart).toBeGreaterThan(0.8);
+    expect(apart).toBeLessThan(2.4);
+  });
+});

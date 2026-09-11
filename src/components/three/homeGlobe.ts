@@ -34,6 +34,9 @@ export interface HomeGlobeData {
   qiblaMode?: boolean;
   /** Device compass heading, degrees clockwise from true north (null = none). */
   deviceHeading?: number | null;
+  /** True once the magnetometer reading can be trusted. Until then the marker
+   *  stays a plain dot: an arrow pointing at noise is worse than no arrow. */
+  headingCalibrated?: boolean;
   /** Bearing to the Kaaba, degrees clockwise from true north. */
   qiblaDirection?: number;
 }
@@ -498,6 +501,36 @@ function locationMarkerTexture(): THREE.Texture {
   return tex;
 }
 
+/**
+ * The location marker as a facing arrow, pointing up the sprite.
+ *
+ * Drawn rather than shipped so it can take the marker's own colour, and cut
+ * with a notch at the back so which end is the point survives being 50 pixels
+ * across on a bright coastline.
+ */
+function headingArrowTexture(): THREE.Texture {
+  const size = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext('2d')!;
+  ctx.beginPath();
+  ctx.moveTo(64, 10);
+  ctx.lineTo(112, 112);
+  ctx.lineTo(64, 86);
+  ctx.lineTo(16, 112);
+  ctx.closePath();
+  // White first and fat, so the shape keeps an outline over land or sea.
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = 14;
+  ctx.strokeStyle = '#ffffff';
+  ctx.stroke();
+  ctx.fillStyle = PIN_COLOR;
+  ctx.fill();
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
 const NIGHT_VERTEX_SHADER = `
   varying vec3 vNormal;
   void main() {
@@ -773,6 +806,7 @@ export class HomeGlobe {
   update(data: HomeGlobeData): void {
     this.data = data;
     if (!this.ready) return;
+    this.setMarkerArrow(!!data.qiblaMode && !!data.headingCalibrated && !data.groundMode);
     const wantQibla = !!data.qiblaMode && !data.groundMode;
     if (wantQibla !== this.inQiblaMode) {
       if (wantQibla) this.enterQiblaMode();
@@ -1257,21 +1291,42 @@ export class HomeGlobe {
 
   // Scratch vectors for the ground view — applyGroundOrientation runs at
   // compass rate, so no per-call allocations.
+  /** The marker's two faces: a dot normally, an arrow while the qibla is up. */
+  private dotTexture?: THREE.Texture;
+  private arrowTexture?: THREE.Texture;
+  private showingArrow = false;
+  private smoothArrowHeading = -1;
+  private arrowUp = new THREE.Vector3();
+  private arrowFacing = new THREE.Vector3();
+  private arrowHere = new THREE.Vector3();
+  private arrowAhead = new THREE.Vector3();
+  private arrowCanvas = new THREE.Vector2();
+
   private groundUp = new THREE.Vector3();
   private groundNorth = new THREE.Vector3();
   private groundEast = new THREE.Vector3();
   private groundFacing = new THREE.Vector3();
   private groundLookAt = new THREE.Vector3();
 
+  /**
+   * The direction a phone pointing at `headingDeg` faces, at a place whose
+   * local up is `up`. North is world up flattened into the tangent plane,
+   * which degenerates only at the poles, where any direction will do.
+   */
+  private facingAt(up: THREE.Vector3, headingDeg: number, out: THREE.Vector3): THREE.Vector3 {
+    const north = this.groundNorth.set(0, 1, 0).addScaledVector(up, -up.y);
+    if (north.lengthSq() < 1e-6) north.set(1, 0, 0);
+    north.normalize();
+    const east = this.groundEast.crossVectors(north, up).normalize();
+    const rad = headingDeg * D2R;
+    return out.set(0, 0, 0).addScaledVector(north, Math.cos(rad)).addScaledVector(east, Math.sin(rad));
+  }
+
   /** Point the ground camera at the phone's compass heading, slightly down. */
   private applyGroundOrientation(): void {
     const cam = this.globe.camera() as THREE.PerspectiveCamera;
     const pos = cam.position;
     const up = this.groundUp.copy(pos).normalize();
-    const north = this.groundNorth.set(0, 1, 0).addScaledVector(up, -up.y);
-    if (north.lengthSq() < 1e-6) north.set(1, 0, 0);
-    north.normalize();
-    const east = this.groundEast.crossVectors(north, up).normalize();
 
     const raw = this.data.deviceHeading ?? 0;
     // Low-pass filter the heading (shortest-arc lerp) so the view and the line
@@ -1283,8 +1338,7 @@ export class HomeGlobe {
       if (diff < -180) diff += 360;
       this.smoothHeading = (this.smoothHeading + diff * 0.22 + 360) % 360;
     }
-    const rad = this.smoothHeading * D2R;
-    const facing = this.groundFacing.set(0, 0, 0).addScaledVector(north, Math.cos(rad)).addScaledVector(east, Math.sin(rad));
+    const facing = this.facingAt(up, this.smoothHeading, this.groundFacing);
     cam.up.copy(up);
     this.groundLookAt.copy(pos).add(facing).addScaledVector(up, -GROUND_PITCH);
     cam.lookAt(this.groundLookAt);
@@ -1300,6 +1354,73 @@ export class HomeGlobe {
     // Compass events re-arm this on every reading, so the loop stays live while
     // the phone is moving and parks shortly after the readings stop.
     this.renderThenSettle();
+  }
+
+  /**
+   * Swap the location marker between a plain dot and an arrow pointing the way
+   * the phone is facing. The arrow only appears once the reading can be
+   * trusted; before that it would be pointing at noise.
+   */
+  private setMarkerArrow(on: boolean): void {
+    if (on === this.showingArrow || !this.pin) return;
+    this.showingArrow = on;
+    const mat = this.pin.material as THREE.SpriteMaterial;
+    if (on) {
+      if (!this.arrowTexture) this.arrowTexture = headingArrowTexture();
+      mat.map = this.arrowTexture;
+    } else {
+      mat.map = this.dotTexture ?? mat.map;
+      mat.rotation = 0;
+      // So coming back does not swing in from wherever it was left.
+      this.smoothArrowHeading = -1;
+    }
+    mat.needsUpdate = true;
+  }
+
+  /**
+   * Turn the arrow to face the way the phone is pointing.
+   *
+   * Worked in screen space rather than laid flat on the globe: the marker is a
+   * sprite, always square to the camera, and at the shallow angle the surface
+   * makes near the edge of the disc a flat arrow would be squashed to a line.
+   * So the direction is taken into the world at the marker's own position,
+   * projected, and the sprite turned by the angle that comes back — which
+   * stays right however the globe has been turned or rolled.
+   *
+   * Runs per frame off the sprite's own render hook, because it depends on the
+   * camera as much as on the compass.
+   */
+  private updateHeadingArrow(cam: THREE.PerspectiveCamera): void {
+    if (!this.showingArrow || !this.pin) return;
+    const raw = this.data.deviceHeading ?? 0;
+    // Same shortest-arc low pass as the ground view, or the arrow twitches
+    // with every noisy magnetometer read.
+    if (this.smoothArrowHeading < 0) this.smoothArrowHeading = raw;
+    else {
+      let diff = raw - this.smoothArrowHeading;
+      if (diff > 180) diff -= 360;
+      if (diff < -180) diff += 360;
+      this.smoothArrowHeading = (this.smoothArrowHeading + diff * 0.22 + 360) % 360;
+    }
+
+    const up = this.arrowUp.copy(this.pin.position).normalize();
+    const facing = this.facingAt(up, this.smoothArrowHeading, this.arrowFacing);
+    const here = this.arrowHere.copy(this.pin.position).project(cam);
+    const ahead = this.arrowAhead
+      .copy(this.pin.position)
+      .addScaledVector(facing, GLOBE_RADIUS * 0.04)
+      .project(cam);
+
+    // Projection gives a square -1..1 box; the screen is not square, so the
+    // angle has to be measured in pixels or a portrait phone skews it.
+    const size = this.globe.renderer().getSize(this.arrowCanvas);
+    const angle = Math.atan2((ahead.y - here.y) * size.y, (ahead.x - here.x) * size.x);
+    // The drawn arrow rests pointing up the screen, which is a quarter turn
+    // from the zero of the angle measured above. Checked on the device by
+    // pinning the rotation at zero and looking at where the arrow ended up,
+    // rather than reasoning about which way a canvas is flipped on its way to
+    // the GPU: the first guess at this was out by half a turn.
+    (this.pin.material as THREE.SpriteMaterial).rotation = angle - Math.PI / 2;
   }
 
   /**
@@ -1456,7 +1577,9 @@ export class HomeGlobe {
       this.moonHalo.material.dispose();
     }
     if (this.pin) {
-      (this.pin.material as THREE.SpriteMaterial).map?.dispose();
+      // Both faces, not just whichever happens to be mounted.
+      this.dotTexture?.dispose();
+      this.arrowTexture?.dispose();
       this.pin.material.dispose();
     }
     this.placeholderTexture?.dispose();
@@ -1630,12 +1753,19 @@ export class HomeGlobe {
     // depthTest off so the marker can sit exactly on the surface without the
     // sphere slicing the half of the sprite that falls behind it; the globe is
     // put back in front of it by hand in updatePinVisibility().
+    this.dotTexture = locationMarkerTexture();
     this.pin = new THREE.Sprite(
       new THREE.SpriteMaterial({
-        map: locationMarkerTexture(), transparent: true, depthWrite: false, depthTest: false,
+        map: this.dotTexture, transparent: true, depthWrite: false, depthTest: false,
       })
     );
+    this.pin.name = 'location';
     this.pin.renderOrder = 3;
+    // The arrow's angle depends on where the camera is as much as on where the
+    // phone points, so it is worked out as the marker is drawn.
+    this.pin.onBeforeRender = (_r, _s, camera) => {
+      this.updateHeadingArrow(camera as THREE.PerspectiveCamera);
+    };
     scene.add(this.pin);
 
     // Sun-position lines (terminator + noon meridian) with salah labels

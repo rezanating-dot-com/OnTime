@@ -16,15 +16,25 @@ export interface QiblaHeadingState {
   /** Degrees still to turn; positive is to your right. */
   rotation: number;
   aligned: boolean;
+  /** Bearing to the Kaaba, degrees clockwise from true north. */
+  qiblaDirection: number;
+  /** Where the phone is pointing, degrees clockwise from true north. */
+  deviceHeading: number;
 }
 
 /**
- * Owns the compass for the qibla screen so the dial and the globe read from
- * one sensor listener rather than two.
+ * The single owner of the compass.
  *
- * `enabled` gates the sensor: QiblaCompass stays mounted for the app's whole
- * lifetime, and running the magnetometer from launch (even when the qibla
- * screen is never opened) is a permanent battery drain.
+ * Everything the qibla needs comes out of here, deliberately: useQibla's
+ * reference count dedupes the *native* sensor, but each instance of it still
+ * registers its own listener and holds its own state, so a second consumer
+ * means every heading event lands twice. Its own note warns of a worse
+ * consequence — with two alive, the count never reaches zero on a restart, so
+ * the native magnetic declination would stop refreshing when you move.
+ *
+ * `enabled` gates the sensor: the globe this feeds stays mounted for as long
+ * as the globe view is up, and running the magnetometer from launch would be
+ * a permanent battery drain.
  */
 export function useQiblaHeading(enabled = true): QiblaHeadingState {
   const { qiblaDirection, deviceHeading, accuracy, error, startListening, stopListening } = useQibla();
@@ -67,5 +77,5 @@ export function useQiblaHeading(enabled = true): QiblaHeadingState {
     wasAligned.current = aligned && calibrated;
   }, [aligned, calibrated, supported]);
 
-  return { supported, unavailable: !!error, calibrated, rotation, aligned };
+  return { supported, unavailable: !!error, calibrated, rotation, aligned, qiblaDirection, deviceHeading };
 }
