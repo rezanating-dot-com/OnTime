@@ -22,39 +22,43 @@ does.
 
 ## Full Description
 
-Paste as-is. Play takes no formatting, so the bullets are real characters and
-the headings are plain capitals. 2,185 of the 4,000 characters.
+Paste as-is. Play takes no formatting at all, so this uses none: no bullet
+characters, no dashes, nothing outside plain ASCII. Written that way
+deliberately after the console started refusing the listing without saying
+which field it disliked - when you cannot see the complaint, the cheapest move
+is to stop giving it anything to complain about. The structure is carried by
+line breaks and two plain capitalised headings instead.
 
-OnTime – Prayer Times & Qibla
+2,385 of the 4,000 characters.
+
+OnTime - Prayer Times & Qibla
 Accurate prayer times wherever in the world you are. No ads, no account, nothing to sign up for.
 
-Everything is worked out on your phone. Your prayer times, the Qibla and the position of the sun are all calculated on the device — none of it needs a connection, and none of it is sent anywhere.
+Everything is worked out on your phone. Your prayer times, the Qibla and the position of the sun are all calculated on the device. None of it needs a connection, and none of it is sent anywhere.
 
 WHAT YOU GET
 
-• Accurate prayer times using the method you trust — ISNA, Muslim World League, Umm Al-Qura, Egyptian, Dubai, Karachi, Kuwait, Qatar, Singapore, Tehran, Turkey or Moonsighting Committee
-• Hanafi and Shafi'i Asr calculation
-• A living globe for your home screen: real satellite imagery that works with no signal, the day and night sides of the Earth, and a line drawn across the world for each prayer — so you can see where in the world it is Fajr right now
-• Or a plain list, if that is what you would rather have
-• Qibla drawn on the globe itself: a line from where you are standing to the Kaaba, an arrow that follows your phone, and a buzz the moment you line up
-• Countdown to the current prayer and the next one
-• Notifications before each prayer, with a real athan if you want one
-• Travel mode, noticed automatically when you are far from home, with shortened Qasr prayers and Jama' combinations
-• Jumu'ah support with your own khutbah time
-• Sunnah and Rawatib reminders for each fard prayer
-• Optional sunrise, middle of the night and last third of the night
-• Light and dark, plus Desert, Rose, Forest and Ocean, and an Auto mode that turns dark at Maghrib
-• A second visual design, drawn around Islamic geometry
+Accurate prayer times using the method you trust: ISNA, Muslim World League, Umm Al-Qura, Egyptian, Dubai, Karachi, Kuwait, Qatar, Singapore, Tehran, Turkey or Moonsighting Committee. Hanafi and Shafi'i Asr calculation, and a Hijri date that you can nudge to match your local moonsighting.
+
+A living globe for your home screen. Real satellite imagery that works with no signal, the day and night sides of the Earth, and a line drawn across the world for each prayer, so you can see where in the world it is Fajr right now. Or a plain list, if that is what you would rather have.
+
+A countdown to the prayer you are in and the one coming, on whichever screen you keep.
+
+The Qibla drawn on that same globe. A line from where you are standing to the Kaaba, an arrow that follows your phone as you turn, and a buzz the moment you line up.
+
+Notifications before each prayer, with a real athan if you want one. Set per prayer, not all at once, so Fajr can wake you and Dhuhr can stay quiet.
+
+Travel mode, noticed on its own when you are far from home, with shortened Qasr prayers and Jama' combinations.
+
+Jumu'ah support with your own khutbah time. Sunnah and Rawatib reminders for each fard prayer. Optional sunrise, middle of the night and last third of the night.
+
+Light and dark, plus Desert, Rose, Forest and Ocean, and an Auto mode that turns dark at Maghrib. A second visual design drawn around Islamic geometry.
 
 PRIVACY
 
-No account. No analytics. No advertising. No third-party tracking. Nothing you do in the app is reported anywhere, because there is nowhere for it to be reported to — there is no server.
+No account. No analytics. No advertising. No third party tracking. Nothing you do in the app is reported anywhere, because there is nowhere for it to be reported to. There is no server.
 
-Three things reach the internet, and none of them is about you:
-
-• your coordinates go to OpenStreetMap to turn them into a city name
-• the globe's satellite photo ships inside the app and needs no connection at all; zoom a long way in and it streams sharper imagery from Esri
-• athan recordings download from Assabile, and only when you choose one
+Three things reach the internet, and none of them is about you. Your coordinates go to OpenStreetMap to turn them into a city name. The globe's satellite photo ships inside the app and needs no connection at all, and only if you zoom a long way in does it stream sharper imagery from Esri. Athan recordings download from Assabile, and only when you choose one.
 
 The full detail, including how to avoid each one, is in the privacy policy.
 
