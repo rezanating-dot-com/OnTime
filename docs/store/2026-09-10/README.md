@@ -17,7 +17,7 @@ sub-menu that only makes sense once you already own it.
 |---|---|---|
 | `01-globe-home` | Globe home | The thing nothing else in this category has. A line drawn across the world for each prayer. Pulled back far enough for the whole planet to sit in frame, and taken from Mecca at sunrise so day and night are both in shot. Leads the listing. |
 | `02-prayer-times` | Prayer list, light | The daily screen, with the Sunnah counts beside each prayer. Also proves there is a light theme. |
-| `03-qibla` | Qibla direction | Named in the short description, so it has to be seen. Shows the great-circle arc, not just a needle. |
+| `03-qibla` | Qibla on the globe | A line from where you are to the Kaaba, drawn across the same globe as shot 01, with the compass guidance under it. Not a needle, and not a separate screen. |
 | `04-travel-mode` | Travel mode in use | Qasr and Jama' shown working, with a real distance from home. The feature most competitors do not have. |
 | `05-notifications` | Notification settings | Where people go first, and where the athan lives. |
 | `06-prayer-reminders` | Per-prayer reminders | Proof it is per-prayer, not one global switch: separate reminder times and a separate athan per prayer. |

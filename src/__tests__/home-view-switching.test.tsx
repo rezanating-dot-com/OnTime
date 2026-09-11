@@ -1,4 +1,4 @@
-import { render, screen, act } from '@testing-library/react';
+import { render, screen, act, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Preferences } from '@capacitor/preferences';
 import App from '../App';
@@ -25,8 +25,12 @@ vi.mock('../plugins/athanPlugin', () => ({
 }));
 
 vi.mock('../components/HomeGlobeScreen', () => ({
-  HomeGlobeScreen: ({ covered }: { covered?: boolean }) => (
-    <div data-testid="home-globe-screen" data-covered={String(!!covered)} />
+  HomeGlobeScreen: ({ covered, qiblaMode }: { covered?: boolean; qiblaMode?: boolean }) => (
+    <div
+      data-testid="home-globe-screen"
+      data-covered={String(!!covered)}
+      data-qibla={String(!!qiblaMode)}
+    />
   ),
 }));
 
@@ -120,19 +124,60 @@ describe('User story: I can switch between List and Globe home views', () => {
     expect(await screen.findByTestId('home-globe-screen')).toBeInTheDocument();
   });
 
-  it('keeps the globe mounted but covered while the Qibla compass is open, so returning is instant', async () => {
+  it('draws the qibla on the globe already up, rather than covering it with another one', async () => {
     const user = userEvent.setup();
 
     await act(async () => {
       renderApp({ homeView: 'globe' });
     });
     const globe = await screen.findByTestId('home-globe-screen');
+    expect(globe).toHaveAttribute('data-qibla', 'false');
     expect(globe).toHaveAttribute('data-covered', 'false');
 
-    await user.click(screen.getByLabelText('Open qibla compass'));
+    await user.click(screen.getByLabelText('Show qibla direction'));
 
-    // Still the same mounted layer — flagged covered, not torn down and rebuilt.
-    expect(screen.getByTestId('home-globe-screen')).toHaveAttribute('data-covered', 'true');
+    // The same globe, now drawing the line. Nothing is laid over it: the
+    // screen this replaced carried a second globe of its own.
+    const after = screen.getByTestId('home-globe-screen');
+    expect(after).toHaveAttribute('data-qibla', 'true');
+    expect(after).toHaveAttribute('data-covered', 'false');
+  });
+
+  it('switches the qibla off when you leave the globe, so the button cannot stay lit over a list', async () => {
+    const user = userEvent.setup();
+
+    await act(async () => {
+      renderApp({ homeView: 'globe' });
+    });
+    await screen.findByTestId('home-globe-screen');
+
+    await user.click(screen.getByLabelText('Show qibla direction'));
+    expect(screen.getByTestId('home-globe-screen')).toHaveAttribute('data-qibla', 'true');
+
+    // Going to the list takes the globe away, and with it anywhere to draw the
+    // line. A button still reading pressed would be the only thing left of it.
+    await user.click(screen.getByLabelText('Switch to list view'));
+
+    await waitFor(() => expect(screen.queryByTestId('home-globe-screen')).not.toBeInTheDocument());
+    expect(screen.getByLabelText('Show qibla direction')).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('brings the globe up for someone who asked for the qibla from the list, and puts the list back after', async () => {
+    const user = userEvent.setup();
+
+    await act(async () => {
+      renderApp({ homeView: 'list' });
+    });
+    expect(screen.queryByTestId('home-globe-screen')).not.toBeInTheDocument();
+
+    await user.click(screen.getByLabelText('Show qibla direction'));
+
+    const globe = await screen.findByTestId('home-globe-screen');
+    expect(globe).toHaveAttribute('data-qibla', 'true');
+
+    await user.click(screen.getByLabelText('Show qibla direction'));
+
+    await waitFor(() => expect(screen.queryByTestId('home-globe-screen')).not.toBeInTheDocument());
   });
 
   it('flags the globe covered while Settings is open', async () => {

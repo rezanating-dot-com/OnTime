@@ -23,7 +23,6 @@ import { NotificationPermissionDialog } from './components/NotificationPermissio
 import { KaabaIcon } from './components/KaabaIcon';
 import { removeRetiredData } from './services/retiredData';
 
-const QiblaCompass = lazy(() => import('./components/QiblaCompass').then(m => ({ default: m.QiblaCompass })));
 const SettingsModal = lazy(() => import('./components/SettingsModal').then(m => ({ default: m.SettingsModal })));
 
 const ONBOARDING_KEY = 'ontime_onboarding_complete';
@@ -32,7 +31,11 @@ const ONBOARDING_KEY = 'ontime_onboarding_complete';
 const TRAVEL_PROMPT_NOTIFICATION_ID = 1300;
 
 function App() {
-  const [isQiblaOpen, setIsQiblaOpen] = useState(false);
+  // The qibla is a mode of the globe now, not a screen of its own.
+  const [qiblaMode, setQiblaMode] = useState(false);
+  // The home view to go back to when the qibla is switched off, for someone
+  // who was on the list when they asked for it.
+  const viewBeforeQibla = useRef<'globe' | 'list' | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState<boolean | null>(null);
 
@@ -64,18 +67,53 @@ function App() {
   // onboarding's own notification step can explain it.
   useNotifications(showOnboarding === false);
 
+  // The qibla line is drawn on the globe, so asking for it from the list has
+  // to bring the globe up, and switching it off puts the list back. Before
+  // this it was a screen of its own carrying a second copy of the world.
+  const closeQibla = useCallback(() => {
+    setQiblaMode(false);
+    const back = viewBeforeQibla.current;
+    viewBeforeQibla.current = null;
+    if (back && back !== settings.homeView) updateHomeView(back);
+  }, [settings.homeView, updateHomeView]);
+
+  // Switching to the list while the qibla is on would leave the line with
+  // nowhere to be drawn and the header button still lit, so leaving the globe
+  // switches it off. The previous view is forgotten: the user has just chosen
+  // one themselves.
+  const toggleHomeView = useCallback(() => {
+    const next = settings.homeView === 'globe' ? 'list' : 'globe';
+    if (next === 'list') {
+      setQiblaMode(false);
+      viewBeforeQibla.current = null;
+    }
+    updateHomeView(next);
+  }, [settings.homeView, updateHomeView]);
+
+  const toggleQibla = useCallback(() => {
+    if (qiblaMode) {
+      closeQibla();
+      return;
+    }
+    if (settings.homeView !== 'globe') {
+      viewBeforeQibla.current = settings.homeView;
+      updateHomeView('globe');
+    }
+    setQiblaMode(true);
+  }, [qiblaMode, closeQibla, settings.homeView, updateHomeView]);
+
   // Handle Android back button / swipe gesture
   const handleBackButton = useCallback(() => {
     if (dialogBackRef.current) {
       dialogBackRef.current();
     } else if (settingsBackRef.current) {
       settingsBackRef.current();
-    } else if (isQiblaOpen) {
-      setIsQiblaOpen(false);
+    } else if (qiblaMode) {
+      closeQibla();
     } else {
       CapApp.minimizeApp();
     }
-  }, [isQiblaOpen]);
+  }, [qiblaMode, closeQibla]);
 
   useEffect(() => {
     const listener = CapApp.addListener('backButton', handleBackButton);
@@ -160,7 +198,7 @@ function App() {
   const isGlobeHome = settings.homeView === 'globe';
   // The overlays are opaque and full-screen, so the globe stays mounted under
   // them (parked, hidden) rather than being rebuilt every time one closes.
-  const globeCovered = isQiblaOpen || isSettingsOpen;
+  const globeCovered = isSettingsOpen;
   const headerGlowVars = isGlobeHome
     ? ({ '--color-muted': 'rgba(245,246,248,0.65)', '--color-text': 'rgba(245,246,248,0.95)' } as React.CSSProperties)
     : undefined;
@@ -184,7 +222,7 @@ function App() {
         </>
       )}
 
-      {isGlobeHome && <HomeGlobeScreen prayers={prayers} covered={globeCovered} />}
+      {isGlobeHome && <HomeGlobeScreen prayers={prayers} covered={globeCovered} qiblaMode={qiblaMode} />}
 
       <div className={`max-w-lg mx-auto w-full flex-1 relative z-10 ${isGlobeHome ? 'pointer-events-none' : 'overflow-y-auto'}`}>
         {/* Top Bar - sticky below status bar */}
@@ -213,19 +251,24 @@ function App() {
             {/* Qibla + view toggle */}
             <div className="flex gap-2">
               <button
-                onClick={() => setIsQiblaOpen(true)}
+                onClick={toggleQibla}
                 className="flex items-center justify-center"
                 style={{
                   width: 40, height: 40, borderRadius: 12,
-                  background: 'color-mix(in srgb, var(--color-primary) 6%, transparent)',
-                  border: '1px solid color-mix(in srgb, var(--color-primary) 15%, transparent)',
+                  background: qiblaMode
+                    ? 'color-mix(in srgb, var(--color-primary) 22%, transparent)'
+                    : 'color-mix(in srgb, var(--color-primary) 6%, transparent)',
+                  border: qiblaMode
+                    ? '1px solid color-mix(in srgb, var(--color-primary) 55%, transparent)'
+                    : '1px solid color-mix(in srgb, var(--color-primary) 15%, transparent)',
                 }}
-                aria-label="Open qibla compass"
+                aria-label="Show qibla direction"
+                aria-pressed={qiblaMode}
               >
                 <KaabaIcon className="w-5 h-5 text-[var(--color-primary)]" />
               </button>
               <button
-                onClick={() => updateHomeView(isGlobeHome ? 'list' : 'globe')}
+                onClick={toggleHomeView}
                 className="flex items-center justify-center"
                 style={{
                   width: 40, height: 40, borderRadius: 12,
@@ -264,14 +307,15 @@ function App() {
 
             <div className="flex items-center gap-1">
               <button
-                onClick={() => setIsQiblaOpen(true)}
-                className="p-2 rounded-full hover:bg-[var(--color-card)] transition-colors"
-                aria-label="Open qibla compass"
+                onClick={toggleQibla}
+                className={`p-2 rounded-full transition-colors ${qiblaMode ? 'bg-[var(--color-primary)]/15' : 'hover:bg-[var(--color-card)]'}`}
+                aria-label="Show qibla direction"
+                aria-pressed={qiblaMode}
               >
-                <KaabaIcon className="w-5 h-5 text-[var(--color-muted)]" />
+                <KaabaIcon className={`w-5 h-5 ${qiblaMode ? 'text-[var(--color-primary)]' : 'text-[var(--color-muted)]'}`} />
               </button>
               <button
-                onClick={() => updateHomeView(isGlobeHome ? 'list' : 'globe')}
+                onClick={toggleHomeView}
                 className="p-2 -mr-2 rounded-full hover:bg-[var(--color-card)] transition-colors"
                 aria-label={isGlobeHome ? 'Switch to list view' : 'Switch to globe view'}
               >
@@ -351,9 +395,6 @@ function App() {
       </div>
 
       {/* Modals */}
-      <Suspense fallback={<div className="fixed inset-0 flex items-center justify-center bg-[var(--color-background)]"><span className="text-[var(--color-muted)]">Loading…</span></div>}>
-        <QiblaCompass isOpen={isQiblaOpen} onClose={() => setIsQiblaOpen(false)} />
-      </Suspense>
       <Suspense fallback={<div className="fixed inset-0 flex items-center justify-center bg-[var(--color-background)]"><span className="text-[var(--color-muted)]">Loading…</span></div>}>
         <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} onBackRef={settingsBackRef} />
       </Suspense>

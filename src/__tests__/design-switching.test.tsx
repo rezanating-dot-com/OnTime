@@ -96,7 +96,7 @@ describe('User story: I can switch between Classic and Islamic designs', () => {
     expect(settingsBtn).toBeInTheDocument();
 
     // Classic header also carries the qibla compass
-    expect(screen.getByLabelText('Open qibla compass')).toBeInTheDocument();
+    expect(screen.getByLabelText('Show qibla direction')).toBeInTheDocument();
   });
 
   it('shows the Islamic design when designStyle is "islamic"', async () => {
@@ -108,7 +108,7 @@ describe('User story: I can switch between Classic and Islamic designs', () => {
     const settingsBtn = await screen.findByLabelText('Open settings');
     expect(settingsBtn).toBeInTheDocument();
 
-    expect(screen.getByLabelText('Open qibla compass')).toBeInTheDocument();
+    expect(screen.getByLabelText('Show qibla direction')).toBeInTheDocument();
   });
 
   it('shows the Classic design when designStyle is "classic"', async () => {

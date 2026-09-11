@@ -21,7 +21,7 @@ FEATURES
 - Hanafi and Shafi'i Asr calculation
 - A living globe for your home screen: real satellite imagery that works with no signal, the day and night sides of the Earth, and a line drawn across the world for each prayer, so you can see where in the world it is Fajr right now
 - Or a plain list, if that is what you want. Both light and dark, plus Desert, Rose, Forest and Ocean, and an Auto mode that turns dark at Maghrib
-- Qibla compass with a great-circle bearing to the Kaaba from anywhere
+- Qibla drawn on the globe itself: a line from where you are standing to the Kaaba, with a live compass telling you which way to turn
 - Countdown to the current and next prayer
 - Notifications before each prayer, with a real athan if you want one
 - Travel mode — noticed automatically when you are far from home, with shortened Qasr prayers and Jama' combinations
