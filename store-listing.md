@@ -1,7 +1,8 @@
 # Google Play Store Listing
 
-*Last updated: 2026-09-10. Update this alongside `PRIVACY_POLICY.md` — the
-privacy paragraph below is a summary of that file and the two must not drift.*
+*Last updated: 2026-09-11 for version 2.0.0. Update this alongside
+`PRIVACY_POLICY.md` — the privacy paragraph below is a summary of that file and
+the two must not drift.*
 
 ## Short Description (80 chars max)
 
@@ -57,8 +58,31 @@ prayer times, salah, islamic, muslim, qibla, adhan, ramadan, athan, namaz, praye
 
 - **Feature graphic** — `docs/store/2026-09-10/feature-graphic.png`, 1024×500. The banner above the screenshots. Regenerate with `scripts/feature-graphic.mjs` after the screenshots, since it cuts the planet out of the first one.
 - **Phone screenshots** — `docs/store/2026-09-10/`, eight at 1080×1920: globe, prayer list, Qibla, travel mode in use, notifications, per-prayer reminders, settings, and the second visual design. Regenerate with `scripts/store-screenshots.mjs`; the README beside them says why each is in the set.
-- **Feature graphic** — 1024×500. **Not done.** Has to be designed; it cannot be screenshotted.
 - **Tablet screenshots** — only needed if the listing claims tablet support.
+
+## Release notes — 2.0.0
+
+Play caps these at 500 characters. Written for someone who has the old version
+and is deciding whether they care, which means the removal goes near the top:
+finding a feature gone with no warning is worse than being told.
+
+```
+The Qibla is now drawn on the globe itself — a line from where you are standing
+to the Kaaba, with an arrow that follows your phone and a buzz the moment you
+line up. Its separate screen is gone.
+
+Prayer tracking has been removed, and the records it kept are deleted when you
+update.
+
+Fixed: the app held on to graphics memory it had finished with, which could
+build up to hundreds of megabytes in ordinary use.
+
+The app now stays in portrait.
+```
+
+A major version rather than a minor one because a feature people were using has
+gone and a screen they knew has been replaced. Nothing in the numbering is
+load-bearing; 1.9.0 would do if that reads better on the listing.
 
 ## Before submitting
 
