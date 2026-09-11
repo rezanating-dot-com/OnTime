@@ -220,8 +220,12 @@ const KAABA_SCALE = 2.2;
  */
 const HEADING_SMOOTHING = 0.22;
 
-/** How far down the frame the planet sits, as a fraction of the window height. */
-const GLOBE_VIEW_DROP = 0.07;
+/** How far down the frame the planet sits, as a fraction of the window height.
+ *  A fraction rather than a count of points, so a tall screen and a short one
+ *  put the same proportion of sky above the planet. On a phone about eleven
+ *  hundred points tall this is a little over fifty of them, which is what it
+ *  takes to clear the line about the prayer that has just been. */
+const GLOBE_VIEW_DROP = 0.05;
 
 /** Below this much movement between readings, treat the phone as held still. */
 const HEADING_STILL_DEG = 0.15;
@@ -512,8 +516,8 @@ function kaabaPinTexture(): THREE.Texture {
   const ctx = canvas.getContext('2d')!;
 
   const cx = 128;
-  const cy = 92;
-  const r = 64;
+  const cy = 94;
+  const r = 70;
   const tipY = 244;
 
   // The map pin every map draws: a circle, and the two straight lines that run
@@ -541,7 +545,12 @@ function kaabaPinTexture(): THREE.Texture {
 
   // The Kaaba, in the header icon's own geometry: a 24-unit box, scaled to sit
   // inside the pin's head.
-  const box = 76;
+  // Nearly twice what it was. The Kaaba is the thing being pointed at, and at
+  // the old size the pin was mostly white with a token in it. Its silhouette
+  // is a hexagon whose furthest corner is about 0.42 of the box away from the
+  // middle, so a box this wide clears the head's edge by a few points and no
+  // more, which is the whole margin there is to spend.
+  const box = 146;
   ctx.save();
   ctx.translate(cx, cy);
   ctx.scale(box / 24, box / 24);
@@ -1818,7 +1827,7 @@ export class HomeGlobe {
     const w = this.host.clientWidth || 1;
     const h = this.host.clientHeight || 1;
     this.globe?.width(w).height(h);
-    this.dropView(w, h);
+    this.dropView(h);
     // Fat lines need the canvas pixel size to compute their screen width.
     const size = this.globe?.renderer().getSize(new THREE.Vector2());
     if (size) {
@@ -1838,11 +1847,14 @@ export class HomeGlobe {
    * one it is given, which slides everything it draws down the screen by the
    * same amount and leaves the text above it some air.
    */
-  private dropView(w: number, h: number): void {
-    const cam = this.globe?.camera() as THREE.PerspectiveCamera | undefined;
-    if (!cam) return;
-    cam.setViewOffset(w, h, 0, -Math.round(h * GLOBE_VIEW_DROP), w, h);
-    cam.updateProjectionMatrix();
+  private dropView(h: number): void {
+    // Through globe.gl's own globeOffset, which is the one setting that
+    // survives. Reaching past it to the camera's view offset — the first two
+    // attempts at this — does nothing at all: the renderer owns that, writes
+    // it from its own state every time the canvas is resized, and puts back
+    // what it had.
+    (this.globe as unknown as { globeOffset?: (o: [number, number]) => void })
+      .globeOffset?.([0, Math.round(h * GLOBE_VIEW_DROP)]);
   }
 
   private buildExtras(): void {
