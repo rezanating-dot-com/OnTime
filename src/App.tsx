@@ -24,7 +24,6 @@ import { KaabaIcon } from './components/KaabaIcon';
 
 const QiblaCompass = lazy(() => import('./components/QiblaCompass').then(m => ({ default: m.QiblaCompass })));
 const SettingsModal = lazy(() => import('./components/SettingsModal').then(m => ({ default: m.SettingsModal })));
-const Dashboard = lazy(() => import('./components/Dashboard').then(m => ({ default: m.Dashboard })));
 
 const ONBOARDING_KEY = 'ontime_onboarding_complete';
 
@@ -34,7 +33,6 @@ const TRAVEL_PROMPT_NOTIFICATION_ID = 1300;
 function App() {
   const [isQiblaOpen, setIsQiblaOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [isDashboardOpen, setIsDashboardOpen] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState<boolean | null>(null);
 
   const settingsBackRef = useRef<(() => void) | null>(null);
@@ -68,12 +66,10 @@ function App() {
       settingsBackRef.current();
     } else if (isQiblaOpen) {
       setIsQiblaOpen(false);
-    } else if (isDashboardOpen) {
-      setIsDashboardOpen(false);
     } else {
       CapApp.minimizeApp();
     }
-  }, [isQiblaOpen, isDashboardOpen]);
+  }, [isQiblaOpen]);
 
   useEffect(() => {
     const listener = CapApp.addListener('backButton', handleBackButton);
@@ -158,7 +154,7 @@ function App() {
   const isGlobeHome = settings.homeView === 'globe';
   // The overlays are opaque and full-screen, so the globe stays mounted under
   // them (parked, hidden) rather than being rebuilt every time one closes.
-  const globeCovered = isQiblaOpen || isDashboardOpen || isSettingsOpen;
+  const globeCovered = isQiblaOpen || isSettingsOpen;
   const headerGlowVars = isGlobeHome
     ? ({ '--color-muted': 'rgba(245,246,248,0.65)', '--color-text': 'rgba(245,246,248,0.95)' } as React.CSSProperties)
     : undefined;
@@ -208,7 +204,7 @@ function App() {
             {/* City name */}
             <LocationDisplay />
 
-            {/* Qibla + Dashboard */}
+            {/* Qibla + view toggle */}
             <div className="flex gap-2">
               <button
                 onClick={() => setIsQiblaOpen(true)}
@@ -243,22 +239,6 @@ function App() {
                   </svg>
                 )}
               </button>
-              <button
-                onClick={() => setIsDashboardOpen(true)}
-                className="flex items-center justify-center"
-                style={{
-                  width: 40, height: 40, borderRadius: 12,
-                  background: 'color-mix(in srgb, var(--color-primary) 6%, transparent)',
-                  border: '1px solid color-mix(in srgb, var(--color-primary) 15%, transparent)',
-                }}
-                aria-label="Open dashboard"
-              >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                  <rect x="4" y="12" width="3.5" height="8" stroke="var(--color-primary)" strokeWidth="1.5"/>
-                  <rect x="10.25" y="7" width="3.5" height="13" stroke="var(--color-primary)" strokeWidth="1.5"/>
-                  <rect x="16.5" y="14" width="3.5" height="6" stroke="var(--color-primary)" strokeWidth="1.5"/>
-                </svg>
-              </button>
             </div>
           </header>
         ) : (
@@ -286,7 +266,7 @@ function App() {
               </button>
               <button
                 onClick={() => updateHomeView(isGlobeHome ? 'list' : 'globe')}
-                className="p-2 rounded-full hover:bg-[var(--color-card)] transition-colors"
+                className="p-2 -mr-2 rounded-full hover:bg-[var(--color-card)] transition-colors"
                 aria-label={isGlobeHome ? 'Switch to list view' : 'Switch to globe view'}
               >
                 {isGlobeHome ? (
@@ -300,15 +280,6 @@ function App() {
                   </svg>
                 )}
               </button>
-              <button
-                onClick={() => setIsDashboardOpen(true)}
-                className="p-2 -mr-2 rounded-full hover:bg-[var(--color-card)] transition-colors"
-                aria-label="Open dashboard"
-              >
-                <svg className="w-6 h-6 text-[var(--color-muted)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
-                </svg>
-              </button>
             </div>
           </header>
         )}
@@ -319,7 +290,7 @@ function App() {
         {/* Today's Sky — removed for now, kept here in case it comes back.
             Was dropped while a full-screen overlay covered it, so we weren't
             running a hidden WebGL context alongside the qibla globe. */}
-        {/* {!isGlobeHome && !isQiblaOpen && !isDashboardOpen && !isSettingsOpen && <SunDomeCard prayers={prayers} />} */}
+        {/* {!isGlobeHome && !isQiblaOpen && !isSettingsOpen && <SunDomeCard prayers={prayers} />} */}
 
         {/* Current Prayer & Countdown */}
         {(currentPrayer || nextPrayer) && (
@@ -379,9 +350,6 @@ function App() {
       </Suspense>
       <Suspense fallback={<div className="fixed inset-0 flex items-center justify-center bg-[var(--color-background)]"><span className="text-[var(--color-muted)]">Loading…</span></div>}>
         <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} onBackRef={settingsBackRef} />
-      </Suspense>
-      <Suspense fallback={<div className="fixed inset-0 flex items-center justify-center bg-[var(--color-background)]"><span className="text-[var(--color-muted)]">Loading…</span></div>}>
-        <Dashboard isOpen={isDashboardOpen} onClose={() => setIsDashboardOpen(false)} />
       </Suspense>
       <TravelPromptDialog onBackRef={dialogBackRef} />
       <NotificationPermissionDialog onBackRef={dialogBackRef} />

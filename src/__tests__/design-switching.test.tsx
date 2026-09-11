@@ -95,9 +95,8 @@ describe('User story: I can switch between Classic and Islamic designs', () => {
     const settingsBtn = await screen.findByLabelText('Open settings');
     expect(settingsBtn).toBeInTheDocument();
 
-    // Classic header has aria-label "Open dashboard"
-    const dashboardBtn = screen.getByLabelText('Open dashboard');
-    expect(dashboardBtn).toBeInTheDocument();
+    // Classic header also carries the qibla compass
+    expect(screen.getByLabelText('Open qibla compass')).toBeInTheDocument();
   });
 
   it('shows the Islamic design when designStyle is "islamic"', async () => {
@@ -105,12 +104,11 @@ describe('User story: I can switch between Classic and Islamic designs', () => {
       renderApp({ designStyle: 'islamic' });
     });
 
-    // Islamic design still has settings and dashboard buttons
+    // Islamic design still has settings and qibla buttons
     const settingsBtn = await screen.findByLabelText('Open settings');
     expect(settingsBtn).toBeInTheDocument();
 
-    const dashboardBtn = screen.getByLabelText('Open dashboard');
-    expect(dashboardBtn).toBeInTheDocument();
+    expect(screen.getByLabelText('Open qibla compass')).toBeInTheDocument();
   });
 
   it('shows the Classic design when designStyle is "classic"', async () => {

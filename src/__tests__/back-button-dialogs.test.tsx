@@ -11,7 +11,7 @@ import { TravelProvider } from '../context/TravelContext';
 /**
  * ST-14: the two z-[100] dialogs sit above every z-50 overlay and were
  * invisible to App's back-button state machine, which runs
- * settings -> qibla -> dashboard -> minimizeApp(). Back therefore minimised
+ * settings -> qibla -> minimizeApp(). Back therefore minimised
  * the app with the dialog still on screen.
  */
 beforeAll(() => {

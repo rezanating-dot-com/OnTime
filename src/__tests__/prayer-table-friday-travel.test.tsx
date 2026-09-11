@@ -108,10 +108,9 @@ describe.each([
 
     // The non-travelling Friday branch substitutes label *and* time; the Jama'
     // branch substituted only the label, so the same screen rendered
-    // "Jumuah + Asr  12:24 — 3:41 PM" against a 13:00 khutbah — contradicting
-    // its own non-travelling rendering, and opening the tracking prompt at Asr
-    // rather than at the khutbah. The time is split across text nodes, so read
-    // the row as text.
+    // "Jumuah + Asr  12:24 — 3:41 PM" against a 13:00 khutbah, contradicting
+    // its own non-travelling rendering. The time is split across text nodes,
+    // so read the row as text.
     const row = (await screen.findByText(/Jumuah \+ Asr/)).closest('div')!.parentElement!;
     expect(row.textContent).toContain('1:00');
     expect(row.textContent).not.toContain('12:24');
@@ -120,8 +119,10 @@ describe.each([
 });
 
 describe('the Jumuah row between khutbah and Dhuhr (PM-9)', () => {
-  it('becomes trackable once the khutbah has started, not once Dhuhr arrives', async () => {
+  it('reads as passed once the khutbah has started, not once Dhuhr arrives', async () => {
     // Travel off, so this is the plain Friday row rather than the Jama' pair.
+    // The Islamic design is the one that shows a prayer has passed: the row
+    // fades and its dot dims.
     vi.mocked(Preferences.get).mockImplementation(async ({ key }) =>
       key === 'ontime_settings'
         ? { value: JSON.stringify({ ...SAVED, travel: { ...SAVED.travel, override: 'force_off' } }) }
@@ -134,7 +135,7 @@ describe('the Jumuah row between khutbah and Dhuhr (PM-9)', () => {
           <SettingsProvider>
             <LocationProvider>
               <TravelProvider>
-                <PrayerTable prayers={PRAYERS} currentPrayer={null} nextPrayerTime={at(12, 24)} />
+                <IslamicPrayerTable prayers={PRAYERS} currentPrayer={null} nextPrayerTime={at(12, 24)} />
               </TravelProvider>
             </LocationProvider>
           </SettingsProvider>
@@ -142,21 +143,22 @@ describe('the Jumuah row between khutbah and Dhuhr (PM-9)', () => {
       );
     });
 
-    await screen.findByText('Jumuah');
+    const name = await screen.findByText('Jumuah');
+    // 11:00: the khutbah is still ahead, so the row is at full strength.
+    expect(name.style.opacity).toBe('1');
 
     // 13:01: the khutbah has started, but Dhuhr (12:24) is the boundary that
     // refreshes this table and it is not the one this row is measured against.
-    // Nothing re-rendered, so isPassed stayed false in the handler's closure
-    // and the row was untrackable for the whole gap. Deliberately no tap
-    // before this point: tapping selects the row, which starts its own
-    // per-second countdown and would re-render it for unrelated reasons.
+    // Without a timer of its own nothing re-renders, and the row went on
+    // looking upcoming for the whole gap. Deliberately no tap before this
+    // point: tapping selects the row, which starts its own per-second
+    // countdown and would re-render it for unrelated reasons.
     await act(async () => {
       vi.setSystemTime(new Date(2026, 8, 11, 13, 1, 0));
       await vi.advanceTimersByTimeAsync(61_000);
     });
 
-    await act(async () => { screen.getByText('Jumuah').click(); });
-    expect(screen.getByText('Prayed on time?')).toBeInTheDocument();
+    expect(screen.getByText('Jumuah').style.opacity).toBe('0.55');
     view.unmount();
   });
 });
