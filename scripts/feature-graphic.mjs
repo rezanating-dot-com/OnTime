@@ -48,21 +48,31 @@ const PAGE = `
   html, body { width: 1024px; height: 500px; overflow: hidden; }
   body {
     font-family: 'Ubuntu', system-ui, sans-serif;
-    background: radial-gradient(ellipse 820px 560px at 78% 48%, #101a2e 0%, #070b14 55%, #03050a 100%);
+    /* Lit behind the words, then settled onto exactly the sky the screenshot
+       was taken against — #03050a — well before the planet starts.
+       The cut-out carries that sky in the gap between the planet's rim and the
+       labels sitting just off it, and its own atmosphere halo just outside the
+       rim. Put either against a different black and you get a ring around the
+       Earth; this is the whole reason the right half of this is flat. */
+    background: linear-gradient(101deg, #0c1426 0%, #070c17 33%, #03050a 52%, #03050a 100%);
     position: relative;
   }
   .stars { position: absolute; inset: 0; }
   .stars i { position: absolute; border-radius: 50%; background: #fff; }
-  .glow {
-    position: absolute; right: -30px; top: 50%; transform: translateY(-50%);
-    width: 600px; height: 600px; border-radius: 50%;
-    background: radial-gradient(circle, rgba(80,130,255,0.22) 0%, rgba(80,130,255,0.06) 45%, transparent 68%);
-  }
+  /* No halo of our own. The globe brings the app's own atmosphere with it in
+     the cut-out, and a second one drawn underneath only shows up as a ring. */
   #globe {
-    position: absolute; right: 38px; top: 50%; transform: translateY(-50%);
-    width: 452px; height: 452px;
-    -webkit-mask-image: radial-gradient(circle at 50% 50%, #000 0 68%, transparent 71.5%);
-    mask-image: radial-gradient(circle at 50% 50%, #000 0 68%, transparent 71.5%);
+    position: absolute; right: 24px; top: 50%; transform: translateY(-50%);
+    width: 492px; height: 492px;
+    /* Two numbers that both have to be right, and neither is where you would
+       guess. A circle gradient measures its stops along the ray to the
+       farthest CORNER, so with a fifth of a radius of air around the planet
+       its rim lands near 59% of the ray, not near 50%. And the fade has to
+       FINISH before 70.7%, which is where the ray crosses the nearest edge:
+       past that the square's own sides show through as four flats on what is
+       supposed to be a sphere. Start after the rim, end before the edge. */
+    -webkit-mask-image: radial-gradient(circle at 50% 50%, #000 0 64%, transparent 69.5%);
+    mask-image: radial-gradient(circle at 50% 50%, #000 0 64%, transparent 69.5%);
   }
   .copy { position: absolute; left: 68px; top: 50%; transform: translateY(-50%); width: 500px; }
   .name {
@@ -83,7 +93,6 @@ const PAGE = `
   }
 </style>
 <div class="stars" id="stars"></div>
-<div class="glow"></div>
 <canvas id="globe" width="900" height="900"></canvas>
 <div class="copy">
   <div class="name">OnTime</div>
@@ -133,9 +142,11 @@ const PAGE = `
       }
       const r = best.width / 2;
       const cx = (best.lo + best.hi) / 2;
-      // A tenth of the radius of air, so the labels that sit just off the limb
-      // are inside the cut.
-      const pad = Math.round(r * 1.1);
+      // A fifth of a radius of air. The labels that sit just off the limb have
+      // to be inside the cut AND inside the mask's fade, and the fade has to
+      // finish before the square's own edge — which only leaves room if the
+      // planet is comfortably smaller than the cut.
+      const pad = Math.round(r * 1.2);
 
       const out = document.getElementById('globe').getContext('2d');
       out.drawImage(img, cx - pad, best.y - pad, pad * 2, pad * 2, 0, 0, 900, 900);
