@@ -143,6 +143,25 @@ describe('User story: I can switch between List and Globe home views', () => {
     expect(after).toHaveAttribute('data-covered', 'false');
   });
 
+  it('switches the qibla off when you leave the globe, so the button cannot stay lit over a list', async () => {
+    const user = userEvent.setup();
+
+    await act(async () => {
+      renderApp({ homeView: 'globe' });
+    });
+    await screen.findByTestId('home-globe-screen');
+
+    await user.click(screen.getByLabelText('Show qibla direction'));
+    expect(screen.getByTestId('home-globe-screen')).toHaveAttribute('data-qibla', 'true');
+
+    // Going to the list takes the globe away, and with it anywhere to draw the
+    // line. A button still reading pressed would be the only thing left of it.
+    await user.click(screen.getByLabelText('Switch to list view'));
+
+    await waitFor(() => expect(screen.queryByTestId('home-globe-screen')).not.toBeInTheDocument());
+    expect(screen.getByLabelText('Show qibla direction')).toHaveAttribute('aria-pressed', 'false');
+  });
+
   it('brings the globe up for someone who asked for the qibla from the list, and puts the list back after', async () => {
     const user = userEvent.setup();
 

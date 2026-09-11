@@ -77,6 +77,19 @@ function App() {
     if (back && back !== settings.homeView) updateHomeView(back);
   }, [settings.homeView, updateHomeView]);
 
+  // Switching to the list while the qibla is on would leave the line with
+  // nowhere to be drawn and the header button still lit, so leaving the globe
+  // switches it off. The previous view is forgotten: the user has just chosen
+  // one themselves.
+  const toggleHomeView = useCallback(() => {
+    const next = settings.homeView === 'globe' ? 'list' : 'globe';
+    if (next === 'list') {
+      setQiblaMode(false);
+      viewBeforeQibla.current = null;
+    }
+    updateHomeView(next);
+  }, [settings.homeView, updateHomeView]);
+
   const toggleQibla = useCallback(() => {
     if (qiblaMode) {
       closeQibla();
@@ -255,7 +268,7 @@ function App() {
                 <KaabaIcon className="w-5 h-5 text-[var(--color-primary)]" />
               </button>
               <button
-                onClick={() => updateHomeView(isGlobeHome ? 'list' : 'globe')}
+                onClick={toggleHomeView}
                 className="flex items-center justify-center"
                 style={{
                   width: 40, height: 40, borderRadius: 12,
@@ -302,7 +315,7 @@ function App() {
                 <KaabaIcon className={`w-5 h-5 ${qiblaMode ? 'text-[var(--color-primary)]' : 'text-[var(--color-muted)]'}`} />
               </button>
               <button
-                onClick={() => updateHomeView(isGlobeHome ? 'list' : 'globe')}
+                onClick={toggleHomeView}
                 className="p-2 -mr-2 rounded-full hover:bg-[var(--color-card)] transition-colors"
                 aria-label={isGlobeHome ? 'Switch to list view' : 'Switch to globe view'}
               >

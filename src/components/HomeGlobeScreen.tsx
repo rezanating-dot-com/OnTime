@@ -259,8 +259,10 @@ export function HomeGlobeScreen({
           </div>
           {/* The bearing itself, which is the one thing that stays true whether
               or not the phone has a working compass. */}
+          {/* Rounded once, so the number and the compass point can never
+              disagree about which side of a boundary the bearing falls on. */}
           <div className="mt-0.5 text-[12px] text-white/60">
-            Qibla {Math.round(qiblaDirection)}° {cardinalDirection(qiblaDirection)} from north
+            Qibla {Math.round(qiblaDirection)}° {cardinalDirection(Math.round(qiblaDirection))} from north
           </div>
         </div>
       )}

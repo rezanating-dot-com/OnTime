@@ -594,6 +594,9 @@ export class HomeGlobe {
   private prayerLineMaterials: LineMaterial[] = [];
   private inGroundMode = false;
   private inQiblaMode = false;
+  /** Where the camera was before the qibla took it somewhere else. */
+  private povBeforeQibla: { lat: number; lng: number; altitude: number } | null = null;
+  private adjustedBeforeQibla = false;
   /** Low-pass filtered compass heading (deg) to damp jitter. */
   private smoothHeading = -1;
   private groundFlyAnim: { start: number; from: THREE.Vector3; to: THREE.Vector3 } | null = null;
@@ -1069,6 +1072,15 @@ export class HomeGlobe {
    */
   private enterQiblaMode(): void {
     this.inQiblaMode = true;
+    // Read off the camera rather than asked of pointOfView, which lags its own
+    // transition. Someone who had turned the globe to look at Japan should get
+    // Japan back, not be dropped on their own city.
+    const cam = this.globe.camera() as THREE.PerspectiveCamera;
+    const here = cam.position.clone();
+    const altitude = here.length() / GLOBE_RADIUS - 1;
+    const geo = xyz2geo(here.normalize());
+    this.povBeforeQibla = { lat: geo.lat, lng: geo.lon, altitude };
+    this.adjustedBeforeQibla = this.adjusted;
     this.buildGroundLine(KAABA_ORBIT_SCALE);
     this.groundGroup.visible = true;
     this.frameQiblaLine();
@@ -1081,10 +1093,11 @@ export class HomeGlobe {
     this.clearGroundLine();
     // Put the horizon back the way the rest of the globe expects it.
     this.setCameraUp(WORLD_UP);
-    // Back to the framing the globe opens at, rather than leaving the user
-    // parked over the middle of an arc that is no longer drawn.
-    this.globe.pointOfView({ ...this.homePov }, 700);
-    this.markAdjusted(false);
+    // Back where they were before, rather than parked over the middle of an
+    // arc that is no longer drawn.
+    this.globe.pointOfView({ ...(this.povBeforeQibla ?? this.homePov) }, 700);
+    this.markAdjusted(this.povBeforeQibla ? this.adjustedBeforeQibla : false);
+    this.povBeforeQibla = null;
     this.renderThenSettle();
   }
 
@@ -1114,7 +1127,10 @@ export class HomeGlobe {
       controls._quat.setFromUnitVectors(cam.up, WORLD_UP);
       controls._quatInverse.copy(controls._quat).invert();
     }
-    controls.update?.();
+    // No update() here on purpose. It would re-derive the camera's position
+    // from the orbit state it held a moment ago, which is a fight with the
+    // fly-in that follows every call to this. The render loop runs update()
+    // on its next frame, and both callers wake it.
   }
 
   /**
