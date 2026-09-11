@@ -512,28 +512,36 @@ function kaabaPinTexture(): THREE.Texture {
   const ctx = canvas.getContext('2d')!;
 
   const cx = 128;
-  const cy = 100;
-  const r = 74;
-  const tipY = 238;
+  const cy = 92;
+  const r = 64;
+  const tipY = 244;
 
-  // The pin: a circle drawn as two curves that meet at the point, which keeps
-  // the shoulders full rather than pinching them the way a straight tangent
-  // does at this size.
+  // The map pin every map draws: a circle, and the two straight lines that run
+  // from the point to where they just touch it. Curving those sides instead
+  // swells the shape into a lobe — it has to be the tangent or it is not the
+  // shape people already know.
+  //
+  // From a point d away from the centre of a circle of radius r, the touching
+  // points sit acos(r / d) either side of the line joining them. Sweep the
+  // long way round, over the top, so the two straight sides are what is left.
+  const d = tipY - cy;
+  const spread = Math.acos(r / d);
+  const down = Math.PI / 2;
   ctx.beginPath();
   ctx.moveTo(cx, tipY);
-  ctx.bezierCurveTo(cx - r * 1.06, cy + r * 0.78, cx - r, cy - r * 0.6, cx, cy - r);
-  ctx.bezierCurveTo(cx + r, cy - r * 0.6, cx + r * 1.06, cy + r * 0.78, cx, tipY);
+  ctx.arc(cx, cy, r, down + spread, down - spread + Math.PI * 2);
   ctx.closePath();
   ctx.fillStyle = '#ffffff';
   ctx.fill();
-  // A thin dark edge, so the pin still has a shape against a bright coastline.
-  ctx.lineWidth = 5;
-  ctx.strokeStyle = 'rgba(10,14,22,0.55)';
+  // A thin dark edge, so the pin keeps its shape over a bright coastline.
+  ctx.lineWidth = 4;
+  ctx.lineJoin = 'round';
+  ctx.strokeStyle = '#132033';
   ctx.stroke();
 
   // The Kaaba, in the header icon's own geometry: a 24-unit box, scaled to sit
   // inside the pin's head.
-  const box = 104;
+  const box = 76;
   ctx.save();
   ctx.translate(cx, cy);
   ctx.scale(box / 24, box / 24);
@@ -571,7 +579,7 @@ function kaabaPinTexture(): THREE.Texture {
  * fraction of the picture's height. A sprite is placed by its centre, so this
  * is what lifts the pin until its point rests on the surface.
  */
-const KAABA_PIN_TIP_OFFSET = (238 - 128) / 256;
+const KAABA_PIN_TIP_OFFSET = (244 - 128) / 256;
 
 /** A small "you are here" marker: blue dot with a thin white ring. */
 function locationMarkerTexture(): THREE.Texture {
@@ -1517,12 +1525,17 @@ export class HomeGlobe {
     // angle has to be measured in pixels or a portrait phone skews it.
     const size = this.globe.renderer().getSize(this.arrowCanvas);
     const angle = Math.atan2((ahead.y - here.y) * size.y, (ahead.x - here.x) * size.x);
-    // The drawn arrow rests pointing up the screen, which is a quarter turn
-    // from the zero of the angle measured above. Checked on the device by
-    // pinning the rotation at zero and looking at where the arrow ended up,
-    // rather than reasoning about which way a canvas is flipped on its way to
-    // the GPU: the first guess at this was out by half a turn.
-    (this.pin.material as THREE.SpriteMaterial).rotation = angle - Math.PI / 2;
+    // The drawn arrow rests pointing up the screen, a quarter turn from the
+    // zero of the angle measured above, and the sprite turns the opposite way
+    // round from that angle.
+    //
+    // Both halves of that were settled on the device rather than reasoned
+    // about, because reasoning got each of them wrong once. The quarter turn
+    // was found by pinning this to zero and looking at where the arrow sat.
+    // The direction was found by turning the phone until the guidance said
+    // "turn left" and checking which way the arrow leaned: it leaned left,
+    // when a phone that has to turn left is pointing to the right of the line.
+    (this.pin.material as THREE.SpriteMaterial).rotation = Math.PI / 2 - angle;
   }
 
   /**
@@ -1550,7 +1563,14 @@ export class HomeGlobe {
 
     const geometry = new LineGeometry();
     geometry.setPositions(pts.flatMap((p) => [p.x, p.y, p.z]));
-    const material = new LineMaterial({ color: 0x22d3ee, linewidth: GROUND_LINE_WIDTH_PX, transparent: true, opacity: 0.95, depthTest: false });
+    // Depth-tested from orbit, so the far half of the line goes behind the
+    // planet instead of being drawn across the sky above it. Not from the
+    // ground, where the camera is below the surface the line sits on and
+    // testing would hide the whole thing.
+    const material = new LineMaterial({
+      color: 0x22d3ee, linewidth: GROUND_LINE_WIDTH_PX,
+      transparent: true, opacity: 0.95, depthTest: asPin,
+    });
     const size = this.globe.renderer().getSize(new THREE.Vector2());
     material.resolution.set(size.x, size.y);
     this.groundLineMaterial = material;
@@ -1619,6 +1639,10 @@ export class HomeGlobe {
       surface.clone().normalize(),
       worldSize * KAABA_PIN_TIP_OFFSET
     );
+    // Makkah is most of a quarter turn away for most of the world, so from a
+    // camera over the user it is usually round the back. Left alone it would
+    // be drawn on top of the planet anyway, floating over the wrong continent.
+    pin.visible = this.onThisSide(surface, cam);
   }
 
   private tapSphere = new THREE.Sphere(new THREE.Vector3(0, 0, 0), GLOBE_RADIUS);
@@ -2219,10 +2243,17 @@ export class HomeGlobe {
    * R / camera distance.
    */
   private updatePinVisibility(cam: THREE.PerspectiveCamera): void {
+    this.pin.visible = this.onThisSide(this.pin.position, cam);
+  }
+
+  /** Whether a point on the surface is on the half of the planet facing the
+   *  camera. Markers are drawn without a depth test so they sit exactly on the
+   *  surface rather than half-buried in it, which means nothing else will hide
+   *  them when they go round the back. */
+  private onThisSide(point: THREE.Vector3, cam: THREE.PerspectiveCamera): boolean {
     const camDist = cam.position.length();
     const horizonCos = camDist > GLOBE_RADIUS ? GLOBE_RADIUS / camDist : 0;
-    const facing = this.pin.position.dot(cam.position) / (GLOBE_RADIUS * camDist);
-    this.pin.visible = facing > horizonCos;
+    return point.dot(cam.position) / (point.length() * camDist) > horizonCos;
   }
 
   private updateZoomFades(): void {

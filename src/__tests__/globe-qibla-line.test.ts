@@ -351,6 +351,33 @@ describe('User story: the marker that shows which way I am facing', () => {
     expect((marker().material as THREE.SpriteMaterial).rotation).toBeCloseTo(0, 3);
   });
 
+  it('leans the way the phone leans, not the mirror of it', () => {
+    // Same frame as above: on the equator at longitude zero with the camera
+    // straight above and the world's north up the screen, east is to the
+    // right. A phone pointing east should put the arrow on its right side.
+    //
+    // This is the assertion that was missing when the arrow leaned the wrong
+    // way on the device: pointing it up and turning it a half turn both work
+    // whichever way round the sprite turns, so nothing here could tell.
+    view.update({
+      ...data, latitude: 0, longitude: 0,
+      qiblaMode: true, deviceHeading: 90, headingCalibrated: true,
+    } as never);
+
+    const cam = harness.globe.cameraObj;
+    cam.position.set(0, 0, 600);
+    cam.up.set(0, 1, 0);
+    cam.lookAt(0, 0, 0);
+    cam.updateMatrixWorld(true);
+    marker().onBeforeRender(
+      null as never, null as never, cam, null as never, marker().material, null as never,
+    );
+
+    // A quarter turn, and the sign is the whole point: the other sign puts the
+    // arrow out to the left while the guidance says to turn right.
+    expect((marker().material as THREE.SpriteMaterial).rotation).toBeCloseTo(Math.PI / 2, 3);
+  });
+
   it('asks for a frame when the phone turns, and stops asking when it is held still', () => {
     view.update({ ...data, qiblaMode: true, deviceHeading: 10, headingCalibrated: true } as never);
 
