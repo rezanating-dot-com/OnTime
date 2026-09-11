@@ -16,16 +16,14 @@
  *
  * Eight screens, which is Play's maximum, chosen to be the things somebody
  * would install the app *for* rather than whatever happens to look tidy: the
- * globe, the prayer list, Qibla, tracking, travel mode in use, and the
- * notification settings people actually go looking for. No sub-menu that only
- * makes sense once you already own the app.
+ * globe, the prayer list, Qibla, travel mode in use, the notification settings
+ * people actually go looking for, and the second visual design. No sub-menu
+ * that only makes sense once you already own the app.
  *
  * ── Why it seeds so much ─────────────────────────────────────────────
  *
- * A store screenshot has to show the app in use, not on its first launch. Each
- * shot starts from a browser profile with onboarding done, a real city, and
- * twelve days of prayer tracking behind it — including two misses, because a
- * flawless 100% reads as a mock-up rather than as the app.
+ * A store screenshot has to show the app in use, not on its first launch, so
+ * each shot starts from a browser profile with onboarding done and a real city.
  *
  * The travel shot seeds a home base in Toronto and a location in Istanbul, so
  * the banner is showing a real distance rather than a placeholder.
@@ -53,30 +51,6 @@ mkdirSync(OUT, { recursive: true });
 
 const TORONTO = { latitude: 43.6532, longitude: -79.3832 };
 const ISTANBUL = { latitude: 41.0082, longitude: 28.9784 };
-
-function trackingBlob() {
-  const prayers = ['fajr', 'dhuhr', 'asr', 'maghrib', 'isha'];
-  const records = [];
-  const now = new Date();
-  for (let back = 0; back < 12; back++) {
-    const day = new Date(now);
-    day.setDate(day.getDate() - back);
-    const key = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`;
-    prayers.forEach((prayer, i) => {
-      // Today only up to Asr, so the list shows a mix of done and still-to-come.
-      if (back === 0 && i > 2) return;
-      // A couple of misses, so the stats read as real rather than a perfect week.
-      const missed = (back === 3 && i === 0) || (back === 7 && i === 4);
-      records.push({
-        date: key,
-        prayer,
-        status: missed ? 'missed' : 'ontime',
-        trackedAt: new Date(day.getTime() - i * 3600_000).toISOString(),
-      });
-    });
-  }
-  return JSON.stringify({ records, dayKeySchema: 2 });
-}
 
 function settings({ homeView = 'list', designStyle = 'classic', travelling = false }) {
   return JSON.stringify({
@@ -142,15 +116,14 @@ async function shot(name, opts) {
     colorScheme: theme === 'light' ? 'light' : 'dark',
   });
   await ctx.addInitScript(
-    ([blob, loc, cityName, countryCode, themeName, tracking]) => {
+    ([blob, loc, cityName, countryCode, themeName]) => {
       const set = (k, v) => localStorage.setItem(`CapacitorStorage.${k}`, v);
       set('ontime_onboarding_complete', 'true');
       set('ontime_theme', themeName);
       set('ontime_location', JSON.stringify({ coordinates: loc, cityName, countryCode }));
-      set('ontime_prayer_tracking', tracking);
       set('ontime_settings', blob);
     },
-    [settings(opts), coords, city, country, theme, trackingBlob()]
+    [settings(opts), coords, city, country, theme]
   );
 
   const page = await ctx.newPage();
@@ -187,17 +160,10 @@ await shot('03-qibla', {
     await page.waitForTimeout(9000);
   },
 });
-await shot('04-prayer-tracking', {
-  homeView: 'list',
-  after: async (page) => {
-    await page.locator('[aria-label="Open dashboard"]').first().click();
-    await page.waitForTimeout(2500);
-  },
-});
-await shot('05-travel-mode', { homeView: 'list', travelling: true, theme: 'light' });
-await shot('06-notifications', { homeView: 'list', after: openSetting('Notifications') });
-await shot('07-prayer-reminders', { homeView: 'list', after: openSetting(['Notifications', 'Prayer Notifications']) });
-await shot('08-settings', {
+await shot('04-travel-mode', { homeView: 'list', travelling: true, theme: 'light' });
+await shot('05-notifications', { homeView: 'list', after: openSetting('Notifications') });
+await shot('06-prayer-reminders', { homeView: 'list', after: openSetting(['Notifications', 'Prayer Notifications']) });
+await shot('07-settings', {
   homeView: 'list',
   theme: 'light',
   after: async (page) => {
@@ -205,5 +171,8 @@ await shot('08-settings', {
     await page.waitForTimeout(1200);
   },
 });
+// The second design gets the last slot, on the same screen as shot 02 so the
+// two read as a choice rather than as two different apps.
+await shot('08-islamic-design', { homeView: 'list', designStyle: 'islamic' });
 
 await browser.close();
