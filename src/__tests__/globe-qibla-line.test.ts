@@ -111,6 +111,20 @@ const data = {
 };
 
 const nextFrame = () => new Promise((r) => requestAnimationFrame(r));
+
+/**
+ * Wait out the swing. The horizon turns over about half a second rather than
+ * cutting, so anything asserting where it ended up has to let it get there.
+ */
+async function horizonSettles(): Promise<void> {
+  const cam = harness.globe.cameraObj;
+  let last = cam.up.clone();
+  for (let i = 0; i < 90; i++) {
+    await nextFrame();
+    if (i > 2 && cam.up.distanceTo(last) < 1e-9) return;
+    last = cam.up.clone();
+  }
+}
 const qiblaGroup = () => harness.globe.sceneObj.getObjectByName('qibla')!;
 /** The same lat/lon to cartesian the globe itself uses, for the assertions. */
 const at = (lat: number, lon: number) => {
@@ -179,6 +193,52 @@ describe('User story: the qibla drawn on the globe already up', () => {
     expect(qiblaGroup().children.length).toBe(0);
   });
 
+  it('fades the sun\'s own lines back while the qibla is up, and returns them after', () => {
+    const lines = harness.globe.sceneObj.children.find(
+      (o) => o.type === 'Group' && o !== harness.globe.sceneObj.getObjectByName('qibla'),
+    );
+    const lit = (): number[] =>
+      (lines?.children ?? [])
+        .map((o) => (o as THREE.Mesh).material as THREE.Material)
+        .filter((m) => m && !Array.isArray(m) && m.userData.fullOpacity !== undefined)
+        .map((m) => m.opacity / (m.userData.fullOpacity as number));
+
+    const before = lit();
+    expect(before.length).toBeGreaterThan(0);
+    expect(Math.max(...before)).toBeCloseTo(1, 6);
+
+    view.update({ ...data, qiblaMode: true } as never);
+
+    // Not hidden: they are the reason this globe exists. Taken back far enough
+    // that the one line being asked about is the one the eye lands on.
+    const faded = lit();
+    expect(Math.max(...faded)).toBeLessThan(0.3);
+    expect(Math.min(...faded)).toBeGreaterThan(0);
+
+    view.update({ ...data, qiblaMode: false } as never);
+
+    expect(Math.max(...lit())).toBeCloseTo(1, 6);
+    expect(Math.min(...lit())).toBeCloseTo(1, 6);
+  });
+
+  it('swings the horizon round rather than cutting to it', async () => {
+    const cam = harness.globe.cameraObj;
+    const start = cam.up.clone();
+
+    view.update({ ...data, qiblaMode: true } as never);
+    await nextFrame();
+    const afterAFrame = cam.up.clone();
+
+    await horizonSettles();
+    const arrived = cam.up.clone();
+
+    // A frame in, it has set off but is nowhere near there. The whole world
+    // rotating under you in one frame reads as a glitch; over half a second it
+    // reads as the globe turning to show you something.
+    expect(afterAFrame.angleTo(arrived)).toBeGreaterThan(0.05);
+    expect(start.angleTo(arrived)).toBeGreaterThan(0.05);
+  });
+
   it('moves the camera nowhere at all', () => {
     const cam = harness.globe.cameraObj;
     cam.position.set(0, 0, 420);
@@ -199,13 +259,14 @@ describe('User story: the qibla drawn on the globe already up', () => {
     expect(cam.position.distanceTo(before)).toBe(0);
   });
 
-  it('stands the line upright on the screen, and lays the horizon back flat after', () => {
+  it('stands the line upright on the screen, and lays the horizon back flat after', async () => {
     const cam = harness.globe.cameraObj;
     const here = at(data.latitude, data.longitude);
     const makkah = at(21.4225, 39.8262);
     const normal = here.clone().cross(makkah).normalize();
 
     view.update({ ...data, qiblaMode: true } as never);
+    await horizonSettles();
 
     // Upright means: square to the direction the camera is looking, which is
     // straight down at where you are, and lying in the plane the line is drawn
@@ -216,6 +277,7 @@ describe('User story: the qibla drawn on the globe already up', () => {
     expect(cam.up.length()).toBeCloseTo(1, 6);
 
     view.update({ ...data, qiblaMode: false } as never);
+    await horizonSettles();
 
     // Every other part of the globe assumes north is up.
     expect(cam.up.x).toBeCloseTo(0, 6);

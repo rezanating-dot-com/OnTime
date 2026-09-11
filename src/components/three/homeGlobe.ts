@@ -237,6 +237,16 @@ const HEADING_STILL_DEG = 0.15;
 const KAABA_PIN_PX = 80;
 
 const GROUND_FLY_DURATION_MS = 900;
+
+/** How long the horizon takes to swing round when the qibla comes up. Short
+ *  enough not to be a wait, long enough that the eye follows it rather than
+ *  finding the world already somewhere else. */
+const HORIZON_TURN_MS = 520;
+
+/** What the sun's lines are worth while the qibla is up. Not hidden — they are
+ *  the reason this globe exists — but taken back far enough that the one line
+ *  being asked about is the one the eye lands on. */
+const QIBLA_OTHER_LINE_OPACITY = 0.18;
 /** Ground camera looks slightly down (tan of the pitch angle, ~12°). */
 const GROUND_PITCH = 0.21;
 /** Sun angular distance from the sub-solar point for each solar event.
@@ -720,6 +730,10 @@ export class HomeGlobe {
   private prayerLineMaterials: LineMaterial[] = [];
   private inGroundMode = false;
   private inQiblaMode = false;
+  /** True while the sun's lines are faded back behind the qibla's own. */
+  private linesFaded = false;
+  /** The horizon mid-swing, between one up vector and another. */
+  private upTurn: { start: number; from: THREE.Vector3; to: THREE.Vector3; axis: THREE.Vector3; angle: number } | null = null;
   /** Low-pass filtered compass heading (deg) to damp jitter. */
   private smoothHeading = -1;
   private groundFlyAnim: { start: number; from: THREE.Vector3; to: THREE.Vector3 } | null = null;
@@ -1120,6 +1134,7 @@ export class HomeGlobe {
    *  cached copy of that axis is put back too, or the picture comes upright
    *  while a drag stays rolled. */
   private resetOrbit(): void {
+    this.upTurn = null;
     this.setCameraUp(WORLD_UP);
     this.globe.controls().target.set(0, 0, 0);
   }
@@ -1210,6 +1225,8 @@ export class HomeGlobe {
    */
   private enterQiblaMode(): void {
     this.inQiblaMode = true;
+    this.linesFaded = true;
+    this.applyLineFade();
     this.buildGroundLine(true);
     this.groundGroup.visible = true;
     this.frameQiblaLine();
@@ -1218,12 +1235,14 @@ export class HomeGlobe {
 
   private exitQiblaMode(): void {
     this.inQiblaMode = false;
+    this.linesFaded = false;
+    this.applyLineFade();
     this.groundGroup.visible = false;
     this.clearGroundLine();
     // Put the horizon back the way the rest of the globe expects it, and
     // nothing else: nothing moved on the way in, so nothing moves on the way
-    // out either.
-    this.setCameraUp(WORLD_UP);
+    // out either. Swung back rather than cut back, the same as it came.
+    this.setCameraUp(WORLD_UP, HORIZON_TURN_MS);
     this.renderThenSettle();
   }
 
@@ -1241,7 +1260,47 @@ export class HomeGlobe {
    * a three.js upgrade: there is no public way to say "up has changed", and
    * the alternative is a view whose gestures are reversed.
    */
-  private setCameraUp(up: THREE.Vector3): void {
+  private setCameraUp(up: THREE.Vector3, overMs = 0): void {
+    const cam = this.globe.camera() as THREE.PerspectiveCamera;
+    if (overMs > 0) {
+      const from = cam.up.clone().normalize();
+      const to = up.clone().normalize();
+      const angle = from.angleTo(to);
+      // Already there, or exactly opposite, where there is no one axis to turn
+      // about. Neither is worth animating.
+      if (angle > 1e-4 && angle < Math.PI - 1e-4) {
+        this.upTurn = { start: performance.now(), from, to, axis: from.clone().cross(to).normalize(), angle };
+        this.animateHorizonTurn();
+        return;
+      }
+    }
+    this.upTurn = null;
+    this.applyCameraUp(up);
+  }
+
+  /**
+   * Swing the horizon round rather than cutting to it. The whole world
+   * rotating under you in one frame reads as a glitch; over half a second it
+   * reads as the globe turning to show you something.
+   *
+   * Turned about the axis between the two up vectors, which is a rotation, not
+   * a slide between two directions: a straight interpolation would take the
+   * camera through a shorter, off-plane path and wobble on the way.
+   */
+  private animateHorizonTurn(): void {
+    const turn = this.upTurn;
+    if (!turn || this.disposed) return;
+    const t = Math.min(1, (performance.now() - turn.start) / HORIZON_TURN_MS);
+    // Ease in and out, so it neither jumps off the mark nor arrives hard.
+    const eased = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+    const q = new THREE.Quaternion().setFromAxisAngle(turn.axis, turn.angle * eased);
+    this.applyCameraUp(turn.from.clone().applyQuaternion(q));
+    this.renderThenSettle();
+    if (t >= 1) this.upTurn = null;
+    else requestAnimationFrame(() => this.animateHorizonTurn());
+  }
+
+  private applyCameraUp(up: THREE.Vector3): void {
     const cam = this.globe.camera() as THREE.PerspectiveCamera;
     cam.up.copy(up);
     const controls = this.globe.controls() as unknown as {
@@ -1288,7 +1347,7 @@ export class HomeGlobe {
     const normal = a.clone().cross(b).normalize();
     const along = normal.clone().cross(a).normalize();
 
-    this.setCameraUp(along);
+    this.setCameraUp(along, HORIZON_TURN_MS);
   }
 
   // ── ground view (qibla) ───────────────────────────────────────────────
@@ -1669,6 +1728,7 @@ export class HomeGlobe {
 
   dispose(): void {
     this.disposed = true;
+    this.upTurn = null;
     this.moonFlyAnim = null;
     this.groundFlyAnim = null;
     if (this.idlePauseTimer) clearTimeout(this.idlePauseTimer);
@@ -2013,6 +2073,23 @@ export class HomeGlobe {
    * the horizon right now) and the noon meridian (where it's currently Dhuhr),
    * each labelled with the user's local salah time at the equator.
    */
+  /**
+   * Take the sun's lines back, or give them their full strength again.
+   *
+   * Re-applied after every rebuild as well as on the way in and out, because
+   * the lines are thrown away and drawn again whenever the day moves, and a
+   * fresh one would come back at full strength over a faded set.
+   */
+  private applyLineFade(): void {
+    for (const obj of this.prayerLinesGroup?.children ?? []) {
+      const mat = (obj as THREE.Mesh).material as THREE.Material | undefined;
+      if (!mat || Array.isArray(mat)) continue;
+      const full = mat.userData.fullOpacity as number | undefined;
+      if (full === undefined) continue;
+      mat.opacity = this.linesFaded ? full * QIBLA_OTHER_LINE_OPACITY : full;
+    }
+  }
+
   private rebuildPrayerLines(sunLat: number, sunLon: number): void {
     // Clear the previous lines + labels.
     this.prayerLineMaterials.length = 0;
@@ -2052,6 +2129,8 @@ export class HomeGlobe {
       if (!text) return;
       const pos = geo2xyz(lat, lon, labelRadius);
       const sprite = prayerLabelSprite(text, color);
+      sprite.material.transparent = true;
+      sprite.material.userData.fullOpacity = sprite.material.opacity;
       sprite.position.set(pos.x, pos.y, pos.z);
       this.prayerLinesGroup.add(sprite);
     };
@@ -2063,6 +2142,9 @@ export class HomeGlobe {
       const geo = new LineGeometry();
       geo.setPositions(flat);
       const mat = new LineMaterial({ color, linewidth: widthPx, transparent: true, opacity });
+      // Kept so the qibla can take these back without losing what each one was
+      // worth: they are not all drawn at the same strength to begin with.
+      mat.userData.fullOpacity = opacity;
       mat.resolution.set(size.x, size.y);
       this.prayerLineMaterials.push(mat);
       this.prayerLinesGroup.add(new Line2(geo, mat));
@@ -2147,6 +2229,8 @@ export class HomeGlobe {
     addLabel(maghribAt.lat, maghribAt.lon, fmt('maghrib'), PRAYER_ACCENTS.maghrib);
     addLabel(ishaAt.lat, ishaAt.lon, fmt('isha'), PRAYER_ACCENTS.isha);
     this.updateLabelAnchors();
+    // Whatever was just drawn has to respect the qibla, if it is up.
+    this.applyLineFade();
   }
 
   private labelNdc = new THREE.Vector3();
