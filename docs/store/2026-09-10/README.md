@@ -47,8 +47,18 @@ is near sunrise or sunset. Run it at the wrong hour and you get a fully lit
 disc or a fully dark one, which loses the whole point of the shot. Look at it
 before keeping it.
 
+## Feature graphic
+
+`feature-graphic.png`, 1024×500 — the wide banner Play shows above the
+screenshots. Play will not take a screenshot for this, and a phone screen at
+this shape is mostly empty anyway, so the planet is lifted out of shot 01 and
+set against the app's own night sky with the name beside it.
+
+Regenerate with `scripts/feature-graphic.mjs`, after the screenshots: it reads
+`01-globe-home.png`, so the banner can never show a globe the app does not
+draw. It measures where the planet is rather than assuming, which is what lets
+shot 01 be retaken at a different zoom without silently mis-framing this.
+
 ## Still to do before a listing update
 
-- **Feature graphic**, 1024×500. Not something to screenshot; it has to be
-  designed.
 - **Tablet screenshots**, if the listing claims tablet support.
