@@ -16,13 +16,13 @@ sub-menu that only makes sense once you already own it.
 | File | Screen | What it has to prove |
 |---|---|---|
 | `01-globe-home` | Globe home | The thing nothing else in this category has. A line drawn across the world for each prayer. Leads the listing. |
-| `02-prayer-times` | Prayer list, light | The daily screen, with tracking marks and Sunnah counts. Also proves there is a light theme. |
+| `02-prayer-times` | Prayer list, light | The daily screen, with the Sunnah counts beside each prayer. Also proves there is a light theme. |
 | `03-qibla` | Qibla direction | Named in the short description, so it has to be seen. Shows the great-circle arc, not just a needle. |
-| `04-prayer-tracking` | Dashboard | The reason to come back, rather than the reason to install. |
-| `05-travel-mode` | Travel mode in use | Qasr and Jama' shown working, with a real distance from home. The feature most competitors do not have. |
-| `06-notifications` | Notification settings | Where people go first, and where the athan lives. |
-| `07-prayer-reminders` | Per-prayer reminders | Proof it is per-prayer, not one global switch: separate reminder times and a separate athan per prayer. |
-| `08-settings` | Settings, light | Shows the whole feature surface in one frame — location, method, appearance, notifications, travel. |
+| `04-travel-mode` | Travel mode in use | Qasr and Jama' shown working, with a real distance from home. The feature most competitors do not have. |
+| `05-notifications` | Notification settings | Where people go first, and where the athan lives. |
+| `06-prayer-reminders` | Per-prayer reminders | Proof it is per-prayer, not one global switch: separate reminder times and a separate athan per prayer. |
+| `07-settings` | Settings, light | Shows the whole feature surface in one frame — location, method, appearance, notifications, travel. |
+| `08-islamic-design` | Second design, dark | The same list as shot 02, so the pair reads as a choice of look rather than as two different apps. |
 
 ## What these were rendered from
 
@@ -35,10 +35,8 @@ device does; only the timing differs, and timing is not in a screenshot.
 
 ## Seeded state
 
-A store screenshot has to show the app in use, not on its first launch. So each
-one starts from twelve days of prayer tracking, a real city, and onboarding
-done. The tracking history carries **two missed prayers on purpose** — a
-flawless week reads as a mock-up rather than as the app.
+A store screenshot has to show the app in use, not on its first launch, so each
+one starts from a real city with onboarding already done.
 
 The travel shot puts home in Toronto and the user in Istanbul, so the banner
 shows a real distance and the list shows Dhuhr and Asr genuinely combined.

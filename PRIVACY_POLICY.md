@@ -19,7 +19,6 @@ what each one reveals.
 Stored on your device only, and never transmitted anywhere:
 
 - Your prayer calculation method, Asr madhab, and display preferences
-- Your prayer tracking history
 - Jumuah, travel mode, and notification settings
 - Your home base location, used by travel mode
 - Theme and design choices

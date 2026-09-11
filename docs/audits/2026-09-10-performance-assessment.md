@@ -186,6 +186,10 @@ Reachable, though, and now covered by a test that steps the clock backwards.
   five sequential native-bridge round-trips before the first mark could appear.
 - The stored tracking blob was re-fetched and re-parsed on every read — seven
   times over opening the list and then the dashboard.
+
+  Both tracking findings were true when measured and were fixed as described.
+  Prayer tracking was removed from the app later the same day, so neither code
+  path survives; the numbers are left here as the record of what was found.
 - Clearing the city search box rebuilt its sixteen suggestions by scanning all
   33,203 cities once per name: half a million comparisons, each time the box
   went empty.

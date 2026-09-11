@@ -5,7 +5,7 @@ privacy paragraph below is a summary of that file and the two must not drift.*
 
 ## Short Description (80 chars max)
 
-Prayer times, Qibla, tracking and travel mode. Works offline. No ads, no accounts.
+Prayer times, Qibla and travel mode. Works offline. No ads, no accounts.
 
 ## Full Description
 
@@ -22,7 +22,6 @@ FEATURES
 - A living globe for your home screen: real satellite imagery that works with no signal, the day and night sides of the Earth, and a line drawn across the world for each prayer, so you can see where in the world it is Fajr right now
 - Or a plain list, if that is what you want. Both light and dark, plus Desert, Rose, Forest and Ocean, and an Auto mode that turns dark at Maghrib
 - Qibla compass with a great-circle bearing to the Kaaba from anywhere
-- Prayer tracking — mark each prayer on time or missed, and see your week
 - Countdown to the current and next prayer
 - Notifications before each prayer, with a real athan if you want one
 - Travel mode — noticed automatically when you are far from home, with shortened Qasr prayers and Jama' combinations
@@ -53,11 +52,11 @@ Lifestyle
 
 ## Tags
 
-prayer times, salah, islamic, muslim, qibla, adhan, prayer tracker, ramadan, athan, namaz
+prayer times, salah, islamic, muslim, qibla, adhan, ramadan, athan, namaz, prayer reminder
 
 ## Assets
 
-- **Phone screenshots** — `docs/store/2026-09-10/`, eight at 1080×1920: globe, prayer list, Qibla, tracking, travel mode in use, notifications, per-prayer reminders, settings. Regenerate with `scripts/store-screenshots.mjs`; the README beside them says why each is in the set.
+- **Phone screenshots** — `docs/store/2026-09-10/`, eight at 1080×1920: globe, prayer list, Qibla, travel mode in use, notifications, per-prayer reminders, settings, and the second visual design. Regenerate with `scripts/store-screenshots.mjs`; the README beside them says why each is in the set.
 - **Feature graphic** — 1024×500. **Not done.** Has to be designed; it cannot be screenshotted.
 - **Tablet screenshots** — only needed if the listing claims tablet support.
 
