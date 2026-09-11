@@ -132,6 +132,7 @@ beforeEach(async () => {
     createLinearGradient: () => ({ addColorStop: () => {} }),
     clearRect: () => {}, fillRect: () => {}, beginPath: () => {}, closePath: () => {},
     arc: () => {}, moveTo: () => {}, lineTo: () => {}, roundRect: () => {},
+    bezierCurveTo: () => {}, quadraticCurveTo: () => {},
     fill: () => {}, stroke: () => {}, fillText: () => {}, strokeText: () => {},
     save: () => {}, restore: () => {}, translate: () => {}, scale: () => {},
   })) as unknown as typeof HTMLCanvasElement.prototype.getContext;
@@ -178,33 +179,30 @@ describe('User story: the qibla drawn on the globe already up', () => {
     expect(qiblaGroup().children.length).toBe(0);
   });
 
-  it('backs the camera off far enough to see both ends of the line', () => {
+  it('stands far enough off to show the ground around you, and no further', () => {
     view.update({ ...data, qiblaMode: true } as never);
 
     const framed = harness.povs.at(-1)!;
-    // Toronto to Makkah is about 100 degrees of arc, so the camera has to be
-    // able to see 50 degrees either side of the midpoint. From altitude h the
-    // horizon is acos(1 / (1 + h)) away, which needs h of at least about 0.56
-    // before the ends are even on the edge, and more to clear the silhouette.
-    const horizonDeg = (Math.acos(1 / (1 + framed.altitude)) * 180) / Math.PI;
-    expect(horizonDeg).toBeGreaterThan(55);
-    // And not so far that the globe is a marble.
-    expect(framed.altitude).toBeLessThanOrEqual(3.2);
+    // Close enough that where you are is a place rather than a dot, far enough
+    // that the line has somewhere to go. Framing both ends instead meant
+    // backing off until the planet was a marble, which is what this replaced.
+    expect(framed.altitude).toBeGreaterThan(0.8);
+    expect(framed.altitude).toBeLessThan(2);
   });
 
   it('stands the line upright on the screen, and lays the horizon back flat after', () => {
     const cam = harness.globe.cameraObj;
     const here = at(data.latitude, data.longitude);
     const makkah = at(21.4225, 39.8262);
-    const mid = here.clone().add(makkah).normalize();
     const normal = here.clone().cross(makkah).normalize();
 
     view.update({ ...data, qiblaMode: true } as never);
 
-    // Upright means: square to the direction the camera is looking, and lying
-    // in the plane the line is drawn in. A phone is far taller than it is
-    // wide, and a line to Makkah laid across it does not fit.
-    expect(Math.abs(cam.up.dot(mid))).toBeLessThan(1e-6);
+    // Upright means: square to the direction the camera is looking, which is
+    // straight down at where you are, and lying in the plane the line is drawn
+    // in. A phone is far taller than it is wide, and a line to Makkah laid
+    // across it runs out of frame in a quarter of the distance.
+    expect(Math.abs(cam.up.dot(here))).toBeLessThan(1e-6);
     expect(Math.abs(cam.up.dot(normal))).toBeLessThan(1e-6);
     expect(cam.up.length()).toBeCloseTo(1, 6);
 
@@ -251,14 +249,12 @@ describe('User story: the qibla drawn on the globe already up', () => {
     expect(Math.abs(carried.z)).toBeLessThan(1e-5);
   });
 
-  it('frames the middle of the line, not the user and not Makkah', () => {
+  it('looks at where you are standing, not at the middle of the line', () => {
     view.update({ ...data, qiblaMode: true } as never);
 
     const framed = harness.povs.at(-1)!;
-    // Somewhere in the north Atlantic, between Toronto and Makkah.
-    expect(framed.lng).toBeGreaterThan(data.longitude);
-    expect(framed.lng).toBeLessThan(40);
-    expect(framed.lat).toBeGreaterThan(30);
+    expect(framed.lat).toBeCloseTo(data.latitude, 4);
+    expect(framed.lng).toBeCloseTo(data.longitude, 4);
   });
 });
 
