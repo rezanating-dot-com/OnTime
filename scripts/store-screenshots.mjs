@@ -20,6 +20,11 @@
  * people actually go looking for, and the second visual design. No sub-menu
  * that only makes sense once you already own the app.
  *
+ * Light everywhere except the two globe shots. The globe paints its own night
+ * sky whatever theme the app is in, so a light one would be a light frame
+ * around a dark picture; every other screen reads better light on a store
+ * page, where the surrounding chrome is white.
+ *
  * ── Why it seeds so much ─────────────────────────────────────────────
  *
  * A store screenshot has to show the app in use, not on its first launch, so
@@ -154,43 +159,35 @@ const openSetting = (title) => async (page) => {
   }
 };
 
-await shot('01-globe-home', {
-  homeView: 'globe',
-  place: MECCA,
-  settle: 11000,
-  // Two things the default framing does not give you. The globe opens close
-  // enough that the Earth fills the frame edge to edge, which reads as a map
-  // rather than as a planet, so pull back until the whole disc and its
-  // atmosphere are inside the shot. And the day and night sides only both
-  // appear when the camera is over the line between them, which is why this
-  // one shot is taken from Mecca near sunrise rather than from Toronto.
-  after: async (page) => {
-    await page.locator('canvas').first().hover();
-    // Nine notches. Seven leaves the disc clipped at the left edge; eleven
-    // leaves so much empty sky that the planet reads as small.
-    for (let i = 0; i < 9; i++) {
-      await page.mouse.wheel(0, 120);
-      await page.waitForTimeout(120);
-    }
-    await page.waitForTimeout(4000);
-  },
-});
+// Dark, and staying dark: the globe is a night sky whatever theme the rest of
+// the app is in, and a light frame around it would be a frame around nothing.
+// No zooming out any more — the app opens at this framing by itself now, so
+// the shot is what a launch actually looks like. Taken from Mecca because the
+// day and night sides only both appear when the camera is near the line
+// between them.
+await shot('01-globe-home', { homeView: 'globe', place: MECCA, settle: 13000 });
 await shot('02-prayer-times', { homeView: 'list', theme: 'light' });
 await shot('03-qibla', {
   // The qibla is drawn on the globe itself now rather than on a screen of its
-  // own, so this shot starts on the globe and turns the line on.
+  // own, so this shot starts on the globe and turns the line on. Also dark,
+  // for the same reason as shot 01.
+  //
+  // Taken from Istanbul rather than Toronto so the Kaaba is on the near side
+  // of the planet: from North America it is round the back, the pin is
+  // correctly hidden, and the shot would be a line running off the edge.
   homeView: 'globe',
-  settle: 11000,
+  place: ISTANBUL,
+  settle: 13000,
   after: async (page) => {
     await page.locator('[aria-label="Show qibla direction"]').first().click();
-    // Long enough for the camera to settle and for the app to stop asking for
-    // a figure-8, which a browser with no magnetometer will never satisfy.
+    // Long enough for the horizon to swing round and for the app to stop
+    // asking for a figure-8, which a browser with no compass never satisfies.
     await page.waitForTimeout(9500);
   },
 });
 await shot('04-travel-mode', { homeView: 'list', travelling: true, theme: 'light' });
-await shot('05-notifications', { homeView: 'list', after: openSetting('Notifications') });
-await shot('06-prayer-reminders', { homeView: 'list', after: openSetting(['Notifications', 'Prayer Notifications']) });
+await shot('05-notifications', { homeView: 'list', theme: 'light', after: openSetting('Notifications') });
+await shot('06-prayer-reminders', { homeView: 'list', theme: 'light', after: openSetting(['Notifications', 'Prayer Notifications']) });
 await shot('07-settings', {
   homeView: 'list',
   theme: 'light',
@@ -201,6 +198,6 @@ await shot('07-settings', {
 });
 // The second design gets the last slot, on the same screen as shot 02 so the
 // two read as a choice rather than as two different apps.
-await shot('08-islamic-design', { homeView: 'list', designStyle: 'islamic' });
+await shot('08-islamic-design', { homeView: 'list', theme: 'light', designStyle: 'islamic' });
 
 await browser.close();
