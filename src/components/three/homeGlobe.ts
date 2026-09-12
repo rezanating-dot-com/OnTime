@@ -194,8 +194,16 @@ const MOON_COLOR = '#d9d4ca';
  */
 const MOON_TEXTURE_URL = '/moon.jpg';
 /** Camera distance from the moon's centre when you tap to zoom into it. */
-const MOON_VIEW_DISTANCE = 150;
+const MOON_VIEW_DISTANCE = 220;
 const MOON_FLY_DURATION_MS = 1100;
+/** Orbit range around the moon once locked — earth's own range (set in
+ *  mount()) is scaled to GLOBE_RADIUS and would either clip through the
+ *  moon or let you fly halfway back to earth, so it gets its own. Min
+ *  clears the moon's surface (MOON_RADIUS) with room above the camera's
+ *  near plane; max is a few times the default framing distance, enough to
+ *  pull back and see the whole thing without wandering off it. */
+const MOON_MIN_DISTANCE = 45;
+const MOON_MAX_DISTANCE = 660;
 /** A tap (not a drag) must move less than this and finish within this time. */
 const TAP_MOVE_THRESHOLD_PX = 8;
 const TAP_TIME_THRESHOLD_MS = 400;
@@ -685,6 +693,7 @@ const SURFACE_VERTEX_SHADER = `
 export class HomeGlobe {
   onAdjustedChange?: (adjusted: boolean) => void;
   onGroundModeChange?: (on: boolean) => void;
+  onMoonLockedChange?: (locked: boolean) => void;
 
   private host: HTMLElement;
   private data: HomeGlobeData;
@@ -715,11 +724,8 @@ export class HomeGlobe {
     toTarget: THREE.Vector3;
   } | null = null;
 
-  private moonRot = new THREE.Quaternion();
   private moonLocked = false;
   private moonSurfaceTexture?: THREE.Texture;
-  private worldSunDir = new THREE.Vector3(0, 0, 1);
-  private dragStart = { x: 0, y: 0, active: false };
   private idlePauseTimer?: ReturnType<typeof setTimeout>;
   /** Sun-position lines (terminator + noon meridian) and their labels. */
   private prayerLinesGroup!: THREE.Group;
@@ -820,6 +826,23 @@ export class HomeGlobe {
     // programmatic pointOfView, and the tile gate must not depend on which way
     // the camera was moved. Both checks are two comparisons.
     controls.addEventListener('change', () => this.syncTileEngine());
+    // globe.gl's own 'change' handler (registered before this one, in its
+    // constructor) unconditionally re-centres the orbit target on the
+    // earth — `controls.target.setScalar(0)` — and rescales rotate/zoom
+    // speed off the camera's distance from the earth's centre. That's
+    // exactly what earth mode wants, but while locked onto the moon it
+    // would fight every drag back toward the earth. It only corrupts
+    // `target` for the *next* update(), not the camera already moved this
+    // frame, so re-pinning it here — after their handler runs — is enough
+    // to make the moon its own orbit centre with no fight and no jitter.
+    controls.addEventListener('change', () => {
+      if (!this.moonLocked || !this.moon) return;
+      controls.target.copy(this.moon.position);
+      const dist = this.globe.camera().position.distanceTo(this.moon.position);
+      const moonAltitude = Math.max(0, (dist - MOON_RADIUS) / MOON_RADIUS);
+      controls.rotateSpeed = moonAltitude * 0.3;
+      controls.zoomSpeed = Math.sqrt(moonAltitude) * 0.5;
+    });
 
     this.globe.onGlobeReady(() => {
       if (this.disposed) return;
@@ -869,7 +892,6 @@ export class HomeGlobe {
     // whole HomeGlobe alive for as long as anything still referenced it.
     this.canvas = this.globe.renderer().domElement;
     this.canvas.addEventListener('pointerdown', this.onCanvasPointerDown);
-    this.canvas.addEventListener('pointermove', this.onCanvasPointerMove);
     this.canvas.addEventListener('pointerup', this.onCanvasPointerUp);
   }
 
@@ -877,33 +899,13 @@ export class HomeGlobe {
 
   private onCanvasPointerDown = (e: PointerEvent) => {
     this.pointerDown = { x: e.clientX, y: e.clientY, t: performance.now() };
-    this.dragStart = { x: e.clientX, y: e.clientY, active: this.moonLocked };
-    if (this.moonLocked) this.wake();
-  };
-
-  private onCanvasPointerMove = (e: PointerEvent) => {
-    if (!this.dragStart.active || !this.moonLocked) return;
-    this.wake();
-    const dx = e.clientX - this.dragStart.x;
-    const dy = e.clientY - this.dragStart.y;
-    this.dragStart.x = e.clientX;
-    this.dragStart.y = e.clientY;
-    const q = new THREE.Quaternion()
-      .setFromAxisAngle(new THREE.Vector3(0, 1, 0), -dx * 0.005)
-      .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -dy * 0.005));
-    this.moonRot.premultiply(q);
-    this.applyMoonRotation();
   };
 
   private onCanvasPointerUp = (e: PointerEvent) => {
-    this.dragStart.active = false;
     const dx = e.clientX - this.pointerDown.x;
     const dy = e.clientY - this.pointerDown.y;
     const dt = performance.now() - this.pointerDown.t;
-    if (Math.hypot(dx, dy) > TAP_MOVE_THRESHOLD_PX || dt > TAP_TIME_THRESHOLD_MS) {
-      if (this.moonLocked) this.scheduleIdlePause(1500);
-      return;
-    }
+    if (Math.hypot(dx, dy) > TAP_MOVE_THRESHOLD_PX || dt > TAP_TIME_THRESHOLD_MS) return;
     this.handleTap(e);
   };
 
@@ -1139,13 +1141,22 @@ export class HomeGlobe {
     this.globe.controls().target.set(0, 0, 0);
   }
 
+  /** Common cleanup for leaving a moon-focused view, wherever it's left from:
+   *  drop the lock and hand the orbit range back to earth's own
+   *  (GLOBE_RADIUS-scaled) numbers. Done before any pointOfView() fly-out, or
+   *  the moon's tighter maxDistance would clip the outbound animation. */
+  private leaveMoonView(): void {
+    this.moonFlyAnim = null;
+    this.setMoonLocked(false);
+    const controls = this.globe.controls();
+    controls.minDistance = GLOBE_RADIUS * (1 + MIN_ALTITUDE);
+    controls.maxDistance = MAX_DISTANCE;
+  }
+
   resetView(): void {
     if (this.inGroundMode) this.exitGroundMode();
     this.resetOrbit();
-    this.moonFlyAnim = null;
-    this.moonLocked = false;
-    this.moonRot.identity();
-    this.applyMoonRotation();
+    this.leaveMoonView();
     if (this.moonHalo) this.moonHalo.visible = true;
     this.globe.controls().enabled = true;
     this.homePov = { lat: this.data.latitude, lng: this.data.longitude, altitude: HOME_ALTITUDE };
@@ -1158,10 +1169,7 @@ export class HomeGlobe {
   focusOnLocation(): void {
     if (this.inGroundMode) this.exitGroundMode();
     this.resetOrbit();
-    this.moonFlyAnim = null;
-    this.moonLocked = false;
-    this.moonRot.identity();
-    this.applyMoonRotation();
+    this.leaveMoonView();
     if (this.moonHalo) this.moonHalo.visible = true;
     this.globe.controls().enabled = true;
     this.wake();
@@ -1170,10 +1178,37 @@ export class HomeGlobe {
     this.markAdjusted(true);
   }
 
-  /** Fly the camera out to the moon so it fills the view, then allow spinning it. */
+  /** Fly the camera out to the moon so it fills the view, then allow orbiting
+   *  it — same rotate/zoom gestures as earth, just re-centred and re-scaled
+   *  to the moon (see the 'change' listener in mount()). */
   focusOnMoon(): void {
     if (!this.moon) return;
     this.setCameraUp(WORLD_UP);
+    const controls = this.globe.controls();
+    controls.enabled = false;
+    controls.minDistance = MOON_MIN_DISTANCE;
+    controls.maxDistance = MOON_MAX_DISTANCE;
+    this.setMoonLocked(true);
+    this.moonHalo.visible = false;
+    this.wake();
+    this.markAdjusted(true);
+    this.startMoonFly();
+  }
+
+  /** Fly the camera back to the moon's default framing without leaving the
+   *  zoomed-in view — the moon's own counterpart to resetView(), which resets
+   *  the whole camera and exits back to earth instead. */
+  resetMoonView(): void {
+    if (!this.moon) return;
+    this.setCameraUp(WORLD_UP);
+    this.globe.controls().enabled = false;
+    this.wake();
+    this.startMoonFly();
+  }
+
+  /** Compute the default moon-facing camera position and animate to it.
+   *  Shared by focusOnMoon() (arriving) and resetMoonView() (re-framing). */
+  private startMoonFly(): void {
     const controls = this.globe.controls();
     const moonPos = this.moon.position.clone();
     // Camera at the moon height, offset horizontally toward Earth, so the
@@ -1187,32 +1222,9 @@ export class HomeGlobe {
       fromPos: this.globe.camera().position.clone(),
       toPos: camPos,
       fromTarget: controls.target.clone(),
-      toTarget: moonPos.clone(),
+      toTarget: moonPos,
     };
-    controls.enabled = false;
-    this.moonRot.identity();
-    this.moonLocked = true;
-    this.moonHalo.visible = false;
-    this.applyMoonRotation();
-    this.wake();
-    this.markAdjusted(true);
     this.animateMoonFly();
-  }
-
-  /** Apply the drag rotation to the moon, keeping the lit side sun-facing. */
-  private applyMoonRotation(): void {
-    // `moon` is only assigned in buildExtras(), which runs from onGlobeReady —
-    // but the instance is handed to React the moment mount() returns, and the
-    // "My location" / "Reset view" buttons sit above the loader and are
-    // tappable through the whole prelude. Without this guard both handlers
-    // threw before reaching pointOfView(), so the tap did nothing at all.
-    // Same idiom as focusOnMoon(). buildExtras() re-applies the rotation once
-    // the moon exists, so nothing is lost by skipping here.
-    if (!this.moon) return;
-    this.moon.setRotationFromQuaternion(this.moonRot);
-    this.moonMaterial.uniforms.sunDirection.value
-      .copy(this.worldSunDir)
-      .applyQuaternion(this.moonRot.clone().invert());
   }
 
   // ── qibla mode (the line, seen from orbit) ────────────────────────────
@@ -1354,8 +1366,7 @@ export class HomeGlobe {
 
   private enterGroundMode(): void {
     this.inGroundMode = true;
-    this.moonFlyAnim = null;
-    this.moonLocked = false;
+    this.leaveMoonView();
     this.globe.controls().enabled = false;
     // The ground is only ~0.2 units below the camera — the default near plane
     // (1) would clip it, showing black. Pull the near plane in.
@@ -1386,8 +1397,7 @@ export class HomeGlobe {
     this.groundFlyAnim = null;
     // Symmetric cleanup: if a moon tap snuck in during ground mode, make sure
     // we don't leave the moon lock / controls / halo in a moon-mode state.
-    this.moonFlyAnim = null;
-    this.moonLocked = false;
+    this.leaveMoonView();
     if (this.moonHalo) this.moonHalo.visible = true;
     this.groundGroup.visible = false;
     this.clearGroundLine();
@@ -1716,10 +1726,11 @@ export class HomeGlobe {
     cam.lookAt(this.globe.controls().target);
     if (t >= 1) {
       this.moonFlyAnim = null;
-      // Intentionally leave OrbitControls disabled: globe.gl hard-resets the
-      // orbit target to the origin on its change event, so re-enabling here
-      // would snap the camera back to Earth. resetView()/focusOnLocation()
-      // re-enable controls when the user explicitly changes view.
+      // Safe to re-enable now the camera and target both sit on the moon:
+      // the 'change' listener in mount() re-pins the target to it (and
+      // rescales rotate/zoom speed) on every drag from here on, so orbiting
+      // never fights its way back toward earth.
+      this.globe.controls().enabled = true;
       this.scheduleIdlePause(1500);
     } else {
       requestAnimationFrame(() => this.animateMoonFly());
@@ -1735,7 +1746,6 @@ export class HomeGlobe {
     document.removeEventListener('visibilitychange', this.onVisibility);
     removeTileLoadListener(this.tileLoadListener);
     this.canvas?.removeEventListener('pointerdown', this.onCanvasPointerDown);
-    this.canvas?.removeEventListener('pointermove', this.onCanvasPointerMove);
     this.canvas?.removeEventListener('pointerup', this.onCanvasPointerUp);
     this.canvas = undefined;
     this.ro?.disconnect();
@@ -1823,6 +1833,12 @@ export class HomeGlobe {
     if (this.adjusted === value) return;
     this.adjusted = value;
     this.onAdjustedChange?.(value);
+  }
+
+  private setMoonLocked(value: boolean): void {
+    if (this.moonLocked === value) return;
+    this.moonLocked = value;
+    this.onMoonLockedChange?.(value);
   }
 
   private syncLoop(): void {
@@ -2053,17 +2069,22 @@ export class HomeGlobe {
     const { latitude: sunLat, longitude: sunLon } = subSolarPoint(this.data.now);
     const { latitude: moonLat, longitude: moonLon } = subLunarPoint(this.data.now);
     const sunDir = v3(this.globe.getCoords(sunLat, sunLon, 1)).normalize();
-
     this.nightMaterial.uniforms.sunDirection.value.copy(sunDir);
-    this.worldSunDir.copy(sunDir);
 
-    const sunPos = this.globe.getCoords(sunLat, sunLon, SUN_ALTITUDE);
-    this.sun.position.copy(v3(sunPos));
-    this.sunHalo.position.copy(v3(sunPos));
-    const moonPos = this.globe.getCoords(moonLat, moonLon, MOON_ALTITUDE);
-    this.moon.position.copy(v3(moonPos));
-    this.moonHalo.position.copy(v3(moonPos));
-    this.applyMoonRotation();
+    const sunPos = v3(this.globe.getCoords(sunLat, sunLon, SUN_ALTITUDE));
+    this.sun.position.copy(sunPos);
+    this.sunHalo.position.copy(sunPos);
+    const moonPos = v3(this.globe.getCoords(moonLat, moonLon, MOON_ALTITUDE));
+    this.moon.position.copy(moonPos);
+    this.moonHalo.position.copy(moonPos);
+    // sunDir is the direction from *earth's* centre, correct for earth's own
+    // terminator since earth sits at the origin — but the moon sits far off
+    // in its own direction, so lighting it with that same vector points the
+    // "sun" at wherever earth's centre is instead of where the real sun
+    // actually sits relative to the moon. The moon's phase needs the sun
+    // direction measured from the moon itself.
+    const moonSunDir = sunPos.clone().sub(moonPos).normalize();
+    this.moonMaterial.uniforms.sunDirection.value.copy(moonSunDir);
 
     this.rebuildPrayerLines(sunLat, sunLon);
   }

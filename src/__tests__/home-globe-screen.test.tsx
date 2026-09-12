@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach, beforeAll } from 'vitest';
 import { act, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { HomeGlobeScreen } from '../components/HomeGlobeScreen';
 import { GLOBE_LOADER_FADE_MS } from '../components/GlobeLoader';
 import { renderWithProviders } from '../test/helpers';
@@ -10,8 +11,12 @@ const receivedProps: Array<{ data: unknown; fallback?: unknown }> = [];
 // callbacks onto this and drives it through setCovered().
 const fakeView = {
   onGroundModeChange: undefined as ((v: boolean) => void) | undefined,
+  onMoonLockedChange: undefined as ((v: boolean) => void) | undefined,
   onSurfaceReady: undefined as (() => void) | undefined,
   setCovered: vi.fn(),
+  focusOnLocation: vi.fn(),
+  resetView: vi.fn(),
+  resetMoonView: vi.fn(),
 };
 vi.mock('../components/three/Scenes', async () => {
   const { useEffect } = await import('react');
@@ -125,6 +130,48 @@ describe('HomeGlobeScreen', () => {
       rerender(<HomeGlobeScreen prayers={[]} covered={false} />);
       await waitFor(() => expect(fakeView.setCovered).toHaveBeenLastCalledWith(false));
       expect(wrapper.style.visibility).not.toBe('hidden');
+    });
+  });
+
+  describe('User story: I zoom into the moon and want to undo my spin without losing my place', () => {
+    beforeEach(() => {
+      fakeView.resetMoonView.mockClear();
+    });
+
+    it('shows My location and Reset view before the moon is ever touched', async () => {
+      renderScreen();
+      await waitFor(() => expect(received.length).toBeGreaterThan(0));
+      expect(screen.getByText('My location')).toBeInTheDocument();
+      expect(screen.getByText('Reset view')).toBeInTheDocument();
+      expect(screen.queryByText('Reset moon')).not.toBeInTheDocument();
+    });
+
+    it('swaps My location for Reset moon once the moon is locked, and taps it through', async () => {
+      const user = userEvent.setup();
+      renderScreen();
+      await waitFor(() => expect(fakeView.onMoonLockedChange).toBeTypeOf('function'));
+
+      act(() => fakeView.onMoonLockedChange!(true));
+      expect(screen.queryByText('My location')).not.toBeInTheDocument();
+      expect(screen.getByText('Reset view')).toBeInTheDocument();
+      const resetMoon = screen.getByText('Reset moon');
+
+      await user.click(resetMoon);
+      expect(fakeView.resetMoonView).toHaveBeenCalledTimes(1);
+      // Tapping it does not exit the moon — the row does not revert on its
+      // own, only the lock-state notification does that.
+      expect(screen.getByText('Reset moon')).toBeInTheDocument();
+    });
+
+    it('goes back to My location once the moon is unlocked', async () => {
+      renderScreen();
+      await waitFor(() => expect(fakeView.onMoonLockedChange).toBeTypeOf('function'));
+
+      act(() => fakeView.onMoonLockedChange!(true));
+      act(() => fakeView.onMoonLockedChange!(false));
+
+      expect(screen.getByText('My location')).toBeInTheDocument();
+      expect(screen.queryByText('Reset moon')).not.toBeInTheDocument();
     });
   });
 });

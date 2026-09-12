@@ -191,7 +191,7 @@ describe('HomeGlobe canvas listeners (GL-10)', () => {
       HTMLCanvasElement.prototype.removeEventListener = origRemove;
     }
 
-    expect(added.sort()).toEqual(['pointerdown', 'pointermove', 'pointerup']);
+    expect(added.sort()).toEqual(['pointerdown', 'pointerup']);
     expect(removed.sort()).toEqual(added.sort());
   });
 });

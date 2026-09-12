@@ -69,6 +69,7 @@ export function HomeGlobeScreen({
   const twilight = twilightAnglesFor(settings.calculationMethod);
   const [now, setNow] = useState(() => new Date());
   const [groundMode, setGroundMode] = useState(false);
+  const [moonLocked, setMoonLocked] = useState(false);
   // One compass for the screen and the globe both. It starts and stops itself
   // with the flag below, and buzzes once when you line up.
   const compass = useQiblaHeading((groundMode || qiblaMode) && !covered);
@@ -118,6 +119,7 @@ export function HomeGlobeScreen({
   const onView = useCallback((view: HomeGlobe) => {
     viewRef.current = view;
     view.onGroundModeChange = setGroundMode;
+    view.onMoonLockedChange = setMoonLocked;
     view.onSurfaceReady = () => setSurfaceReady(true);
     view.setCovered(coveredRef.current);
   }, []);
@@ -227,9 +229,15 @@ export function HomeGlobeScreen({
         >
           {groundMode ? 'Exit ground' : 'Ground view'}
         </button> */}
-        <button onClick={() => viewRef.current?.focusOnLocation()} className={CONTROL_CLASS} style={CONTROL_STYLE}>
-          My location
-        </button>
+        {moonLocked ? (
+          <button onClick={() => viewRef.current?.resetMoonView()} className={CONTROL_CLASS} style={CONTROL_STYLE}>
+            Reset moon
+          </button>
+        ) : (
+          <button onClick={() => viewRef.current?.focusOnLocation()} className={CONTROL_CLASS} style={CONTROL_STYLE}>
+            My location
+          </button>
+        )}
         <button onClick={() => viewRef.current?.resetView()} className={CONTROL_CLASS} style={CONTROL_STYLE}>
           Reset view
         </button>
