@@ -6,6 +6,10 @@ import { AthanPlugin } from '../plugins/athanPlugin';
 import { useSettings } from '../context/SettingsContext';
 import { useLocation } from '../context/LocationContext';
 
+function localDayKey(d: Date): string {
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+}
+
 export function useNotifications(enabled = true) {
   const { settings, isLoading: settingsLoading } = useSettings();
   const { location, isLoading: locationLoading } = useLocation();
@@ -35,7 +39,12 @@ export function useNotifications(enabled = true) {
     calculationMethod,
     asrCalculation,
   } = settings;
+  // The local day the prayer schedule was last built. It is armed a fixed
+  // number of days ahead, so each new day it goes unrebuilt costs a day at
+  // the far end of the window.
+  const lastScheduledDay = useRef<string | null>(null);
   const reschedule = useCallback(async () => {
+    lastScheduledDay.current = localDayKey(new Date());
     await scheduleNotifications(location.coordinates, {
       notifications: notificationSettings,
       athan: athanSettings,
@@ -91,6 +100,33 @@ export function useNotifications(enabled = true) {
     const timer = setTimeout(() => { rescheduleSurahKahf(); }, 300);
     return () => clearTimeout(timer);
   }, [rescheduleSurahKahf, masterEnabled]);
+
+  // Top the week up when the app comes back on a later day. Without this the
+  // window only moved on launch or a settings change, so someone who kept the
+  // app in the background for a week stopped getting prayer notifications on
+  // day 8 (#51). Same-day resumes leave it alone so an ordinary foreground
+  // doesn't rebuild ~80 alarms. Someone who never opens the app at all still
+  // runs out; covering that needs a native periodic job.
+  useEffect(() => {
+    if (!masterEnabled) return;
+
+    let cancelled = false;
+    let handle: { remove: () => void } | undefined;
+    CapApp.addListener('appStateChange', ({ isActive }) => {
+      if (!isActive) return;
+      const last = lastScheduledDay.current;
+      if (!last || last === localDayKey(new Date())) return;
+      void rescheduleRef.current();
+    }).then((h) => {
+      if (cancelled) { h.remove(); return; }
+      handle = h;
+    });
+
+    return () => {
+      cancelled = true;
+      handle?.remove();
+    };
+  }, [masterEnabled]);
 
   // Android 12+ can deny SCHEDULE_EXACT_ALARM (denied by default on 14+ for a
   // fresh install), so the alarms already armed are inexact and may land

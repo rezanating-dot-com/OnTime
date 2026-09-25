@@ -136,6 +136,29 @@ describe('About screen version (ST-10)', () => {
   });
 });
 
+describe('About screen features (#50)', () => {
+  it('does not advertise prayer tracking, which was removed', async () => {
+    const user = userEvent.setup();
+    await act(async () => { renderModal(); });
+    await user.click(await screen.findByText('About'));
+    await screen.findByText('Features');
+
+    // The store listing says tracking is gone and its records deleted; the
+    // app's own About screen must not say otherwise.
+    expect(screen.queryByText(/tracking/i)).not.toBeInTheDocument();
+  });
+
+  it('names the globe and travel mode, the features the listing leads with', async () => {
+    const user = userEvent.setup();
+    await act(async () => { renderModal(); });
+    await user.click(await screen.findByText('About'));
+    await screen.findByText('Features');
+
+    expect(screen.getAllByText(/globe/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/travel mode/i).length).toBeGreaterThan(0);
+  });
+});
+
 describe('Manual coordinates (ST-7)', () => {
   const openManual = async (user: ReturnType<typeof userEvent.setup>) => {
     await user.click(await screen.findByText('Location'));

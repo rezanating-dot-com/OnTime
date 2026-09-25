@@ -220,8 +220,11 @@ export function TravelProvider({ children }: { children: ReactNode }) {
 
   function setTravelOverride(override: TravelSettings['override']) {
     const updates: Partial<TravelSettings> = { override };
-    // When forcing on, set the travel start date if not already set
-    if (override === 'force_on' && !settings.travel.travelStartDate) {
+    // Forcing on starts a trip, unless one is already running: keep that
+    // trip's start so the allowance isn't extended. Any other stored start is
+    // left over from an earlier trip or an earlier Always On at home, and
+    // keeping it expired the new trip on the spot (#47).
+    if (override === 'force_on' && !travelState.isTraveling) {
       updates.travelStartDate = tripStartInstant();
     }
     updateTravel(updates);
@@ -237,10 +240,11 @@ export function TravelProvider({ children }: { children: ReactNode }) {
 
   function toggleTravelEnabled() {
     const newEnabled = !settings.travel.enabled;
+    // No trip start here. Enabling the feature is not starting a trip, and is
+    // usually done at home: stamping it measured Max Travel Days from that
+    // moment. A trip's start is written when one begins, in confirmTravel or
+    // on Always On.
     const updates: Partial<TravelSettings> = { enabled: newEnabled };
-    if (newEnabled && !settings.travel.travelStartDate) {
-      updates.travelStartDate = tripStartInstant();
-    }
     // Switching it off by hand means "stop offering this" — a standing choice,
     // not this trip's "not now", so it survives coming home. Switching it back
     // on withdraws that.

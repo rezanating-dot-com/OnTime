@@ -11,15 +11,10 @@ A full-featured Islamic prayer times app for Android and iOS, built with React, 
 - Current prayer window display
 - Optional times: Sunrise, Middle of Night, Last Third of Night
 
-### Qibla Compass
-- Interactive compass with live device heading (hardware sensors on Android, WebKit on iOS)
-- OpenStreetMap view centered on your location with directional arrow toward the Kaaba
+### Globe and Qibla
+- A 3D globe home screen with bundled satellite imagery, the day and night sides of the Earth, and a line for each prayer
+- The Qibla drawn on the globe: a line from your location to the Kaaba, with an arrow that follows the device heading (hardware sensors on Android, WebKit on iOS)
 - Bearing displayed in degrees and cardinal direction
-
-### Prayer Tracking & Dashboard
-- Track each prayer as on-time or missed
-- Weekly score and 7-day activity history
-- Statistics: total on-time, missed, and percentage over 30 days
 
 ### Notifications
 - Per-prayer enable/disable with configurable reminder timing (0–30 min before)
@@ -94,13 +89,13 @@ npx cap open ios
 
 ```
 src/
-├── components/       # UI — PrayerTable, CountdownTimer, QiblaCompass,
-│                     #       SettingsModal, Dashboard, OnboardingScreen,
-│                     #       CitySearch, LocationDisplay, DateHeader
+├── components/       # UI — HomeGlobeScreen, PrayerTable, CountdownTimer,
+│                     #       SettingsModal, OnboardingScreen, CitySearch,
+│                     #       LocationDisplay; three/ holds the 3D views
 ├── context/          # Global state — Location, Settings, Theme, Travel
 ├── hooks/            # usePrayerTimes, useNotifications, useQibla
 ├── services/         # prayerService, notificationService,
-│                     #   prayerTrackingService, athanService
+│                     #   athanService, solarGeometry
 ├── types/            # TypeScript interfaces
 ├── plugins/          # Native bridge (AthanPlugin)
 ├── data/             # City database, country codes

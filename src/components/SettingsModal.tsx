@@ -1688,8 +1688,9 @@ export function SettingsModal({ isOpen, onClose, onBackRef }: SettingsModalProps
               <ul className="text-sm text-[var(--color-muted)] space-y-1">
                 <li>- Accurate prayer times calculation</li>
                 <li>- Multiple calculation methods</li>
-                <li>- Qibla compass</li>
-                <li>- Prayer tracking & statistics</li>
+                <li>- A live globe with day and night</li>
+                <li>- Qibla on the globe</li>
+                <li>- Travel mode with Qasr and Jama'</li>
                 <li>- Customizable notifications</li>
                 <li>- Jumu'ah reminders</li>
               </ul>
