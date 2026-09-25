@@ -29,18 +29,29 @@ export function getSunnahPrayers(isTraveling: boolean) {
 }
 
 /**
+ * The same rawatib as numbers, for views that lay them out themselves:
+ * rak'ah before and after the fard (0 for none), and whether Witr follows.
+ */
+export function sunnahCounts(prayer: PrayerName, isTraveling: boolean): { before: number; after: number; witr: boolean } {
+  const entry = getSunnahPrayers(isTraveling)[prayer] ?? {};
+  const rakat = (s?: string) => {
+    const n = s?.match(/^(\d+)/);
+    return n ? Number(n[1]) : 0;
+  };
+  return {
+    before: rakat(entry.before),
+    after: rakat(entry.after),
+    witr: /witr/i.test(`${entry.before ?? ''} ${entry.after ?? ''}`),
+  };
+}
+
+/**
  * The same rawatib as one short clause for the globe HUD: "4 + 2 sunnah",
  * "2 sunnah + witr". Null when this prayer has none to mention.
  */
 export function sunnahSummary(prayer: PrayerName, isTraveling: boolean): string | null {
-  const entry = getSunnahPrayers(isTraveling)[prayer];
-  if (!entry) return null;
-  const rakat = (s?: string) => {
-    const n = s?.match(/^(\d+)/);
-    return n ? n[1] : null;
-  };
-  const counts = [rakat(entry.before), rakat(entry.after)].filter(Boolean);
-  const witr = /witr/i.test(`${entry.before ?? ''} ${entry.after ?? ''}`);
+  const { before, after, witr } = sunnahCounts(prayer, isTraveling);
+  const counts = [before, after].filter((n) => n > 0);
   if (!counts.length) return witr ? 'witr' : null;
   return `${counts.join(' + ')} sunnah${witr ? ' + witr' : ''}`;
 }

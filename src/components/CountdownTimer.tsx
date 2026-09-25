@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import type { PrayerName, TravelState, DisplaySettings } from '../types';
+import { getSunnahPrayers } from '../utils/sunnah';
 
 interface CountdownTimerProps {
   currentPrayer: PrayerName | null;
@@ -15,26 +16,6 @@ interface CountdownTimerProps {
   /** Boxless style for the Home Globe view: no card chrome, text floats with a drop shadow. */
   glow?: boolean;
 }
-
-// Sunnah prayers associated with each fard prayer
-const SUNNAH_PRAYERS: Record<PrayerName, { before?: string; after?: string; notes?: string }> = {
-  fajr: { before: '2 rak\'at Sunnah' },
-  sunrise: {},
-  dhuhr: { before: '4 rak\'at Sunnah', after: '2 rak\'at Sunnah' },
-  asr: { before: '4 rak\'at (optional)' },
-  maghrib: { after: '2 rak\'at Sunnah' },
-  isha: { after: '2 rak\'at Sunnah + Witr', notes: 'Tahajjud available until Fajr' },
-};
-
-// When traveling, drop most rawatib — keep Fajr sunnah + Witr
-const SUNNAH_PRAYERS_TRAVEL: Record<PrayerName, { before?: string; after?: string; notes?: string }> = {
-  fajr: { before: '2 rak\'at Sunnah' },
-  sunrise: {},
-  dhuhr: {},
-  asr: {},
-  maghrib: {},
-  isha: { after: 'Witr' },
-};
 
 const GLOW_TEXT_SHADOW = '0 2px 20px rgba(0,0,0,0.75), 0 1px 3px rgba(0,0,0,0.9)';
 const GLOW_TEXT = 'rgba(245,246,248,0.96)';
@@ -94,7 +75,7 @@ export function CountdownTimer({ currentPrayer, currentPrayerTime, nextPrayer, n
   // Border width scales from 1px to 2px only during urgent phase (card mode only)
   const borderWidth = isUrgent ? 1 + ((progress - 0.6) / 0.4) : 1;
 
-  const sunnahSource = isTraveling ? SUNNAH_PRAYERS_TRAVEL : SUNNAH_PRAYERS;
+  const sunnahSource = getSunnahPrayers(isTraveling);
   const sunnahInfo = currentPrayer ? sunnahSource[currentPrayer] : null;
 
   // Build list of prayable prayers

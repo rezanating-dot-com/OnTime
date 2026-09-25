@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import type { PrayerName, TravelState, DisplaySettings } from '../types';
 import { GirihBackground, CornerOrnament, CrescentStar } from './IslamicPatterns';
+import { sunnahCounts } from '../utils/sunnah';
 
 interface IslamicCountdownTimerProps {
   currentPrayer: PrayerName | null;
@@ -23,24 +24,6 @@ const ARABIC_NAMES: Record<string, string> = {
   asr: '\u0627\u0644\u0639\u0635\u0631',
   maghrib: '\u0627\u0644\u0645\u063A\u0631\u0628',
   isha: '\u0627\u0644\u0639\u0634\u0627\u0621',
-};
-
-const SUNNAH_COUNTS: Record<PrayerName, { before: number; after: number }> = {
-  fajr: { before: 2, after: 2 },
-  sunrise: { before: 0, after: 0 },
-  dhuhr: { before: 4, after: 2 },
-  asr: { before: 4, after: 0 },
-  maghrib: { before: 0, after: 2 },
-  isha: { before: 4, after: 2 },
-};
-
-const SUNNAH_COUNTS_TRAVEL: Record<PrayerName, { before: number; after: number }> = {
-  fajr: { before: 2, after: 0 },
-  sunrise: { before: 0, after: 0 },
-  dhuhr: { before: 0, after: 0 },
-  asr: { before: 0, after: 0 },
-  maghrib: { before: 0, after: 0 },
-  isha: { before: 0, after: 0 },
 };
 
 export function IslamicCountdownTimer({ currentPrayer, currentPrayerTime, nextPrayer, nextPrayerTime, hours, minutes, seconds, isTraveling = false, travelState, display, glow = false }: IslamicCountdownTimerProps) {
@@ -86,12 +69,12 @@ export function IslamicCountdownTimer({ currentPrayer, currentPrayerTime, nextPr
     : 0;
 
   const isUrgent = progress >= 0.6;
-  const sunnahSource = isTraveling ? SUNNAH_COUNTS_TRAVEL : SUNNAH_COUNTS;
-  const sunnah = currentPrayer ? sunnahSource[currentPrayer] : null;
+  // From the shared table the other views read, so the designs can't disagree.
+  const sunnah = currentPrayer ? sunnahCounts(currentPrayer, isTraveling) : null;
   const currentArabic = currentPrayer ? ARABIC_NAMES[currentPrayer] : null;
   const nextArabic = nextPrayer ? ARABIC_NAMES[nextPrayer] : null;
   const isIshraqTime = currentPrayer === 'sunrise';
-  const hasSunnah = display.showSunnahCard && sunnah && (sunnah.before > 0 || sunnah.after > 0) && currentPrayer !== 'sunrise';
+  const hasSunnah = display.showSunnahCard && sunnah && (sunnah.before > 0 || sunnah.after > 0 || sunnah.witr) && currentPrayer !== 'sunrise';
 
   const showCurrentTier = display.showCurrentPrayer && currentPrayer && currentPrayer !== 'sunrise';
   const showNextTier = display.showNextPrayer && nextPrayer;
@@ -200,6 +183,12 @@ export function IslamicCountdownTimer({ currentPrayer, currentPrayerTime, nextPr
                         <span className="text-sm font-semibold" style={{ fontFamily: '"Cormorant Garamond", serif' }}>{sunnah!.after}</span>
                         <span className="opacity-70 ml-1">after</span>
                       </span>
+                    )}
+                    {sunnah!.witr && (sunnah!.before > 0 || sunnah!.after > 0) && (
+                      <span className="opacity-40">+</span>
+                    )}
+                    {sunnah!.witr && (
+                      <span className="opacity-70" style={{ color: glowText }}>Witr</span>
                     )}
                   </div>
                 )}
