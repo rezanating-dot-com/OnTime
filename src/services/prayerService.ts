@@ -111,9 +111,22 @@ export function calculatePrayerTimes(
   params.madhab = asrCalc === 'Hanafi' ? Madhab.Hanafi : Madhab.Shafi;
 
   const prayerTimes = new PrayerTimes(coordinates, date, params);
-  
-  // Calculate Sunnah times (Qiyam/Tahajjud)
-  const sunnahTimes = new SunnahTimes(prayerTimes);
+
+  // Calculate Sunnah times (Qiyam/Tahajjud). adhan's SunnahTimes always spans
+  // this evening's Maghrib to tomorrow's Fajr, so before today's Fajr it
+  // describes tomorrow night. The night in progress then is yesterday's
+  // Maghrib to this morning's Fajr, which is yesterday's SunnahTimes.
+  // In polar night yesterday may have no Maghrib, leaving that night
+  // undefined; keep adhan's own answer then rather than blank the rows.
+  let sunnahTimes = new SunnahTimes(prayerTimes);
+  if (date.getTime() < prayerTimes.fajr.getTime()) {
+    const yesterday = new Date(date);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const lastNight = new SunnahTimes(new PrayerTimes(coordinates, yesterday, params));
+    if (isValidPrayerTime(lastNight.middleOfTheNight) && isValidPrayerTime(lastNight.lastThirdOfTheNight)) {
+      sunnahTimes = lastNight;
+    }
+  }
 
   const prayers: PrayerTime[] = [
     { name: 'fajr', label: PRAYER_LABELS.fajr, time: prayerTimes.fajr },
