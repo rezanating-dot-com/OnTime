@@ -7,40 +7,75 @@ import { reminderChannelNameFor } from './reminderSoundService';
 /**
  * Notification ID ranges (do not reuse):
  *
- *   prayer:     1–999   (one per prayer per scheduled day)
+ *   prayer:     10000–69999  (one block of 10000 per prayer, below)
+ *   legacy:     1–999        (prayer ids before the window grew to a month)
  *   jumuah:     1000–1099
  *   kahf:       1100–1199
  *   reminder:   1200–1299
  *   travel:     1300    (the "Are you traveling?" prompt in App.tsx)
  *
- * Prayer sub-ranges within 1–999:
- *   fajr:    100–199   base 100, formula: base + (dayOffset * 10) + slot
- *   sunrise: 200–299   base 200
- *   dhuhr:   300–399   base 300
- *   asr:     400–499   base 400
- *   maghrib: 500–599   base 500
- *   isha:    600–699   base 600
+ * Prayer blocks, the leading digit naming the prayer:
+ *   fajr:    10000–19999   base 10000, formula: base + (decade * 10) + slot
+ *   sunrise: 20000–29999   base 20000
+ *   dhuhr:   30000–39999   base 30000
+ *   asr:     40000–49999   base 40000
+ *   maghrib: 50000–59999   base 50000
+ *   isha:    60000–69999   base 60000
  *
  * Each decade within a prayer's block, base + (decade * 10) + slot, holds:
- *   0      reminder before the prayer         (decade = dayOffset, 0–6)
- *   1      at prayer time                     (decade = dayOffset, 0–6)
+ *   0      reminder before the prayer         (decade = dayOffset, 0–29)
+ *   1      at prayer time                     (decade = dayOffset, 0–29)
  *   2–8    "before it ends" reminders, one per entry of END_REMINDER_OPTIONS
- *          (decade = dayOffset + 1, 0–7: the pass starts at yesterday, whose
+ *          (decade = dayOffset + 1, 0–30: the pass starts at yesterday, whose
  *          Isha window can still be open after local midnight)
  *   9      spare
- * The block therefore reaches base + 78 at most, and the hundreds digit still
- * names the prayer, which cancelNotification() and the click listener rely on.
+ * A month reaches base + 308, so the block has room for a window of up to 998
+ * days before it would spill into the next prayer.
+ *
+ * Until the window grew past a week, prayer ids were 100–699 with the hundreds
+ * digit naming the prayer. Alarms armed by that version are still pending on
+ * the first launch after the update, and the ones already shown can still be
+ * tapped, so the legacy range is still swept and still read; see
+ * prayerForNotificationId().
  */
+
+const PRAYER_ID_BLOCK = 10000;
+const LEGACY_PRAYER_ID_BLOCK = 100;
 
 // Base IDs for each prayer (we'll add offsets for reminder vs at-time)
 const PRAYER_BASE_IDS: Record<PrayerName, number> = {
-  fajr: 100,
-  sunrise: 200,
-  dhuhr: 300,
-  asr: 400,
-  maghrib: 500,
-  isha: 600,
+  fajr: 1 * PRAYER_ID_BLOCK,
+  sunrise: 2 * PRAYER_ID_BLOCK,
+  dhuhr: 3 * PRAYER_ID_BLOCK,
+  asr: 4 * PRAYER_ID_BLOCK,
+  maghrib: 5 * PRAYER_ID_BLOCK,
+  isha: 6 * PRAYER_ID_BLOCK,
 };
+
+const PRAYER_BY_LEADING_DIGIT: Record<number, PrayerName> = {
+  1: 'fajr',
+  2: 'sunrise',
+  3: 'dhuhr',
+  4: 'asr',
+  5: 'maghrib',
+  6: 'isha',
+};
+
+/**
+ * The prayer a notification id belongs to, or null for any other kind
+ * (Jumu'ah, Surah Al-Kahf, the travel prompt). Reads both layouts: the current
+ * one, where the ten-thousands digit names the prayer, and the legacy one,
+ * where the hundreds digit did.
+ */
+export function prayerForNotificationId(id: number): PrayerName | null {
+  if (id >= PRAYER_ID_BLOCK && id < 7 * PRAYER_ID_BLOCK) {
+    return PRAYER_BY_LEADING_DIGIT[Math.floor(id / PRAYER_ID_BLOCK)] ?? null;
+  }
+  if (id >= LEGACY_PRAYER_ID_BLOCK && id < 7 * LEGACY_PRAYER_ID_BLOCK) {
+    return PRAYER_BY_LEADING_DIGIT[Math.floor(id / LEGACY_PRAYER_ID_BLOCK)] ?? null;
+  }
+  return null;
+}
 
 // Jumuah notification IDs (1000–1099 range)
 const JUMUAH_BASE_ID = 1000;
@@ -78,8 +113,20 @@ const END_REMINDER_SLOT_BASE = 2;
  */
 const END_REMINDER_FIRST_DAY = -1;
 
-// Days ahead to schedule notifications (limited by Android)
-const DAYS_TO_SCHEDULE = 7;
+/**
+ * How far ahead prayer alerts are armed: up to a month, so someone who doesn't
+ * open the app for a few weeks keeps getting them. They are only ever topped
+ * up when the app runs, so this window is all there is until the next launch.
+ *
+ * Android caps the alarms one app may hold at once (500), and Jumu'ah, Surah
+ * Al-Kahf and the travel prompt need room in that too, so the prayer schedule
+ * stops at the last whole day that fits in PRAYER_ALARM_BUDGET. The defaults
+ * arm 10 a day and get the full 30 days. Every reminder switched on is 47 a
+ * day; that gets the week every setting used to get, which is the floor.
+ */
+export const MAX_DAYS_TO_SCHEDULE = 30;
+export const MIN_DAYS_TO_SCHEDULE = 7;
+export const PRAYER_ALARM_BUDGET = 300;
 
 // Weeks ahead to schedule Jumuah notifications
 const WEEKS_TO_SCHEDULE_JUMUAH = 4;
@@ -324,12 +371,14 @@ function resolveReminderChannelId(
   return BUILT_IN_SOUNDS.default.channelId;
 }
 
-// ID range boundaries for each notification category
-const CATEGORY_RANGES: Record<NotificationCategory, [number, number]> = {
-  prayer: [1, 999],
-  jumuah: [1000, 1099],
-  kahf: [1100, 1199],
-  reminder: [1200, 1299],
+// ID range boundaries for each notification category. Prayer keeps its legacy
+// range so the first rebuild after the update clears the week the old version
+// armed; leaving it would double every alert for that week.
+const CATEGORY_RANGES: Record<NotificationCategory, ReadonlyArray<readonly [number, number]>> = {
+  prayer: [[1, 999], [PRAYER_ID_BLOCK, 7 * PRAYER_ID_BLOCK - 1]],
+  jumuah: [[1000, 1099]],
+  kahf: [[1100, 1199]],
+  reminder: [[1200, 1299]],
 };
 
 /**
@@ -377,9 +426,13 @@ export async function scheduleNotifications(
 
   const now = new Date();
   const notifications: ScheduleOptions['notifications'] = [];
+  let daysScheduled = 0;
 
-  // Schedule notifications for multiple days, recalculating prayer times each day
-  for (let dayOffset = END_REMINDER_FIRST_DAY; dayOffset < DAYS_TO_SCHEDULE; dayOffset++) {
+  // Schedule notifications for multiple days, recalculating prayer times each
+  // day. Each day is built on its own and kept or dropped whole, so the cut
+  // never leaves a day with its morning alerts and not its evening ones.
+  for (let dayOffset = END_REMINDER_FIRST_DAY; dayOffset < MAX_DAYS_TO_SCHEDULE; dayOffset++) {
+    const day: ScheduleOptions['notifications'] = [];
     const targetDate = new Date(now);
     targetDate.setDate(targetDate.getDate() + dayOffset);
     // Asked at noon: the prayer times only depend on the calendar day, but
@@ -423,7 +476,7 @@ export async function scheduleNotifications(
         const reminderTime = new Date(prayerTime.getTime() - prayerSettings.reminderMinutes * 60000);
 
         if (reminderTime > now) {
-          notifications.push({
+          day.push({
             id: getNotificationId(prayer.name, dayOffset, false),
             title: prayer.label,
             body: PRAYER_MESSAGES[prayer.name].reminder,
@@ -442,7 +495,7 @@ export async function scheduleNotifications(
       if (dayOffset >= 0 && prayerSettings.atPrayerTime && prayerTime > now) {
         const sound = getSoundForNotification(prayerSettings.sound);
         const channelId = resolveChannelId(prayer.name, prayerSettings.sound, settings.athan);
-        notifications.push({
+        day.push({
           id: getNotificationId(prayer.name, dayOffset, true),
           title: prayer.label,
           body: PRAYER_MESSAGES[prayer.name].atTime,
@@ -466,7 +519,7 @@ export async function scheduleNotifications(
           // equator can be under 40 minutes) would otherwise announce the end
           // of a prayer that has not begun.
           if (reminderTime <= prayerTime || reminderTime <= now) continue;
-          notifications.push({
+          day.push({
             id: getEndReminderNotificationId(prayer.name, dayOffset, minutes),
             title: prayer.label,
             body: endReminderMessage(prayer.label, minutes),
@@ -481,12 +534,16 @@ export async function scheduleNotifications(
         }
       }
     }
+
+    if (dayOffset >= MIN_DAYS_TO_SCHEDULE && notifications.length + day.length > PRAYER_ALARM_BUDGET) break;
+    notifications.push(...day);
+    if (dayOffset >= 0) daysScheduled++;
   }
 
   if (notifications.length > 0) {
     try {
       await LocalNotifications.schedule({ notifications });
-      console.log(`Scheduled ${notifications.length} notifications for ${DAYS_TO_SCHEDULE} days`);
+      console.log(`Scheduled ${notifications.length} notifications for ${daysScheduled} days`);
     } catch (error) {
       console.error('Failed to schedule notifications:', error);
     }
@@ -510,8 +567,9 @@ export async function cancelAllNotifications(): Promise<void> {
 export async function cancelByCategory(category: NotificationCategory): Promise<void> {
   try {
     const pending = await LocalNotifications.getPending();
-    const [min, max] = CATEGORY_RANGES[category];
-    const toCancel = pending.notifications.filter((n) => n.id >= min && n.id <= max);
+    const ranges = CATEGORY_RANGES[category];
+    const toCancel = pending.notifications.filter((n) =>
+      ranges.some(([min, max]) => n.id >= min && n.id <= max));
     if (toCancel.length > 0) {
       await LocalNotifications.cancel({
         notifications: toCancel.map((n) => ({ id: n.id })),
@@ -526,11 +584,7 @@ export async function cancelNotification(prayer: PrayerName): Promise<void> {
   try {
     // Cancel all notifications for this prayer (across all days)
     const pending = await LocalNotifications.getPending();
-    const baseId = PRAYER_BASE_IDS[prayer];
-    const toCancel = pending.notifications.filter((n) => {
-      // Check if notification ID belongs to this prayer
-      return Math.floor(n.id / 100) * 100 === baseId;
-    });
+    const toCancel = pending.notifications.filter((n) => prayerForNotificationId(n.id) === prayer);
     
     if (toCancel.length > 0) {
       await LocalNotifications.cancel({
@@ -549,12 +603,7 @@ export function setupNotificationListeners(
   const listener = LocalNotifications.addListener(
     'localNotificationActionPerformed',
     (notification) => {
-      const id = notification.notification.id;
-      // Extract prayer from notification ID (first digit * 100 is the base)
-      const baseId = Math.floor(id / 100) * 100;
-      const prayerName = Object.entries(PRAYER_BASE_IDS).find(
-        ([, base]) => base === baseId
-      )?.[0] as PrayerName | undefined;
+      const prayerName = prayerForNotificationId(notification.notification.id);
 
       if (prayerName && onNotificationClick) {
         onNotificationClick(prayerName);

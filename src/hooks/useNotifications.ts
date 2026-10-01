@@ -29,7 +29,7 @@ export function useNotifications(enabled = true) {
   // This used to depend on the whole `settings` object, and SettingsContext
   // hands back a fresh object on every update — so changing the theme, the
   // distance unit, the design style, the home view, or adding a previous
-  // location each tore down and rebuilt all ~80 prayer alarms and re-ran a
+  // location each tore down and rebuilt every prayer alarm (up to ~300) and re-ran a
   // permission check. Toggling two unrelated switches in a second cost two
   // full cancel/rebuild cycles. scheduleNotifications reads exactly these four
   // fields; keep this list in step with it.
@@ -101,12 +101,12 @@ export function useNotifications(enabled = true) {
     return () => clearTimeout(timer);
   }, [rescheduleSurahKahf, masterEnabled]);
 
-  // Top the week up when the app comes back on a later day. Without this the
-  // window only moved on launch or a settings change, so someone who kept the
-  // app in the background for a week stopped getting prayer notifications on
-  // day 8 (#51). Same-day resumes leave it alone so an ordinary foreground
-  // doesn't rebuild ~80 alarms. Someone who never opens the app at all still
-  // runs out; covering that needs a native periodic job.
+  // Top the window up when the app comes back on a later day. Without this it
+  // only moved on launch or a settings change, so someone who kept the app in
+  // the background ran out at the far end of it (#51). Same-day resumes leave
+  // it alone so an ordinary foreground doesn't rebuild up to ~300 alarms. The
+  // window is up to a month (see MAX_DAYS_TO_SCHEDULE); someone who doesn't
+  // open the app for longer than that still runs out.
   useEffect(() => {
     if (!masterEnabled) return;
 

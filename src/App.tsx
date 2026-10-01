@@ -165,8 +165,8 @@ function App() {
     const distanceText = formatDistance(travelState.distanceFromHomeKm, settings.distanceUnit);
     LocalNotifications.schedule({
       notifications: [{
-        // Outside the prayer range (1–999): prayer rescheduling cancels
-        // that whole range and would otherwise wipe this before it fires.
+        // Outside the prayer ranges (1–999, 10000–69999): prayer rescheduling cancels
+        // both ranges and would otherwise wipe this before it fires.
         id: TRAVEL_PROMPT_NOTIFICATION_ID,
         title: 'Are you traveling?',
         body: `You're about ${distanceText} from home \u2014 tap to enable shortened prayers.`,

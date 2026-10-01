@@ -3,7 +3,10 @@ import {
   scheduleNotifications,
   getNotificationId,
   getEndReminderNotificationId,
+  prayerForNotificationId,
   END_REMINDER_OPTIONS,
+  MAX_DAYS_TO_SCHEDULE,
+  MIN_DAYS_TO_SCHEDULE,
 } from '../services/notificationService';
 import { calculatePrayerTimes } from '../services/prayerService';
 import { defaultAthanSettings } from '../context/SettingsContext';
@@ -110,16 +113,25 @@ describe('reminders before a prayer window ends', () => {
       .filter((n) => n.title === title && /ends in/.test(n.body))
       .sort((a, b) => a.schedule.at.getTime() - b.schedule.at.getTime());
 
+  /**
+   * How many days the schedule reached for a prayer, read from its at-time
+   * alerts. The window depends on how many alerts a day needs, so the tests
+   * count it rather than assume one.
+   */
+  const daysCovered = (title: string) =>
+    scheduled.filter((n) => n.title === title && n.body.startsWith('Time for')).length;
+
   it.each([
     ['fajr', 'Fajr', 'sunrise'],
     ['dhuhr', 'Dhuhr', 'asr'],
     ['asr', 'Asr', 'maghrib'],
     ['maghrib', 'Maghrib', 'isha'],
-  ] as const)('%s: fires the chosen minutes before the next prayer, every day of the week', async (name, label, next) => {
+  ] as const)('%s: fires the chosen minutes before the next prayer, every day scheduled', async (name, label, next) => {
     await scheduleNotifications(TORONTO, makeSettings({ [name]: { endReminderMinutes: [15] } }));
 
     const reminders = endReminders(label);
-    expect(reminders).toHaveLength(7);
+    expect(daysCovered(label)).toBeGreaterThan(MIN_DAYS_TO_SCHEDULE);
+    expect(reminders).toHaveLength(daysCovered(label));
     reminders.forEach((reminder, dayOffset) => {
       const expected = minutesBefore(timeOf(timesFor(TORONTO, dayOffset), next), 15);
       expect(reminder.schedule.at.getTime()).toBe(expected.getTime());
@@ -130,7 +142,7 @@ describe('reminders before a prayer window ends', () => {
     await scheduleNotifications(TORONTO, makeSettings({ isha: { endReminderMinutes: [30] } }));
 
     const reminders = endReminders('Isha');
-    expect(reminders).toHaveLength(7);
+    expect(reminders).toHaveLength(daysCovered('Isha'));
     reminders.forEach((reminder, dayOffset) => {
       const data = timesFor(TORONTO, dayOffset);
       const midnight = data.sunnahTimes!.middleOfTheNight;
@@ -151,21 +163,22 @@ describe('reminders before a prayer window ends', () => {
     const lastNightMidnight = timesFor(TORONTO, 0).sunnahTimes!.middleOfTheNight; // 5 Oct's night
     expect(lastNightMidnight.getTime()).toBeGreaterThan(new Date(2026, 9, 6, 0, 10, 0).getTime());
     expect(reminders[0].schedule.at.getTime()).toBe(minutesBefore(lastNightMidnight, 5).getTime());
-    expect(reminders).toHaveLength(8);
+    // One per day scheduled, plus last night's.
+    expect(reminders).toHaveLength(daysCovered('Isha') + 1);
   });
 
   it('gives one reminder per chosen minute, each saying how long is left', async () => {
     await scheduleNotifications(TORONTO, makeSettings({ dhuhr: { endReminderMinutes: [30, 15, 5] } }));
 
     const reminders = endReminders('Dhuhr');
-    expect(reminders).toHaveLength(21);
+    expect(reminders).toHaveLength(3 * daysCovered('Dhuhr'));
     const day0 = reminders.slice(0, 3);
     expect(day0.map((n) => n.body)).toEqual([
       'Dhuhr ends in 30 minutes',
       'Dhuhr ends in 15 minutes',
       'Dhuhr ends in 5 minutes',
     ]);
-    expect(new Set(reminders.map((n) => n.id)).size).toBe(21);
+    expect(new Set(reminders.map((n) => n.id)).size).toBe(reminders.length);
   });
 
   it('skips a reminder that would land before the prayer has even begun', async () => {
@@ -173,7 +186,7 @@ describe('reminders before a prayer window ends', () => {
     await scheduleNotifications(SINGAPORE, makeSettings({ maghrib: { endReminderMinutes: [45, 30] } }, 'Tehran'));
 
     const reminders = endReminders('Maghrib');
-    expect(reminders).toHaveLength(7);
+    expect(reminders).toHaveLength(daysCovered('Maghrib'));
     expect(reminders.every((n) => n.body === 'Maghrib ends in 30 minutes')).toBe(true);
     reminders.forEach((reminder, dayOffset) => {
       const data = timesFor(SINGAPORE, dayOffset, 'Tehran');
@@ -192,7 +205,7 @@ describe('reminders before a prayer window ends', () => {
     ).resolves.toBeUndefined();
 
     // Dhuhr still closes at Asr in the midnight sun; Maghrib and Isha have no end.
-    expect(endReminders('Dhuhr')).toHaveLength(7);
+    expect(endReminders('Dhuhr')).toHaveLength(daysCovered('Dhuhr'));
     expect(endReminders('Maghrib')).toHaveLength(0);
     expect(endReminders('Isha')).toHaveLength(0);
     for (const n of scheduled) {
@@ -205,7 +218,7 @@ describe('reminders before a prayer window ends', () => {
       sunrise: { enabled: true, endReminderMinutes: [15] },
       fajr: { endReminderMinutes: [15] },
     }));
-    expect(endReminders('Fajr')).toHaveLength(7);
+    expect(endReminders('Fajr')).toHaveLength(daysCovered('Fajr'));
     expect(endReminders('Sunrise')).toHaveLength(0);
   });
 
@@ -214,7 +227,7 @@ describe('reminders before a prayer window ends', () => {
       dhuhr: { enabled: false, endReminderMinutes: [15] },
       asr: { endReminderMinutes: [15] },
     }));
-    expect(endReminders('Asr')).toHaveLength(7);
+    expect(endReminders('Asr')).toHaveLength(daysCovered('Asr'));
     expect(endReminders('Dhuhr')).toHaveLength(0);
   });
 
@@ -238,13 +251,13 @@ describe('reminders before a prayer window ends', () => {
   it('stays silent when the prayer is set to Silent', async () => {
     await scheduleNotifications(TORONTO, makeSettings({ dhuhr: { sound: 'silent', endReminderMinutes: [15] } }));
     const reminders = endReminders('Dhuhr');
-    expect(reminders).toHaveLength(7);
+    expect(reminders).toHaveLength(daysCovered('Dhuhr'));
     for (const n of reminders) {
       expect(n.channelId).toBe('ontime_prayer_silent');
     }
   });
 
-  it('with every option on for every prayer, arms 245 end reminders for the week', async () => {
+  it('with every option on for every prayer, keeps the week: 245 end reminders', async () => {
     const all = { endReminderMinutes: [...END_REMINDER_OPTIONS] };
     await scheduleNotifications(TORONTO, makeSettings({ fajr: all, dhuhr: all, asr: all, maghrib: all, isha: all }));
     expect(scheduled.filter((n) => /ends in/.test(n.body))).toHaveLength(5 * 7 * END_REMINDER_OPTIONS.length);
@@ -253,35 +266,36 @@ describe('reminders before a prayer window ends', () => {
 });
 
 describe('end reminder notification ids', () => {
-  it('offers at most eight options, so a week fits inside each prayer block', () => {
+  it('offers at most eight options, so they fit in slots 2–9 of each decade', () => {
     expect(END_REMINDER_OPTIONS.length).toBeLessThanOrEqual(8);
     expect(END_REMINDER_OPTIONS).toEqual([5, 10, 15, 20, 30, 45, 60]);
   });
 
-  it('stay within 1–999 and never collide with each other or the existing ids', () => {
+  it('stay inside their own prayer block across a full month and never collide', () => {
     const ids: number[] = [];
     for (const prayer of ['fajr', 'sunrise', 'dhuhr', 'asr', 'maghrib', 'isha'] as const) {
-      for (let dayOffset = 0; dayOffset < 7; dayOffset++) {
-        ids.push(getNotificationId(prayer, dayOffset, false));
-        ids.push(getNotificationId(prayer, dayOffset, true));
+      const own: number[] = [];
+      for (let dayOffset = 0; dayOffset < MAX_DAYS_TO_SCHEDULE; dayOffset++) {
+        own.push(getNotificationId(prayer, dayOffset, false));
+        own.push(getNotificationId(prayer, dayOffset, true));
       }
       // End reminders also cover yesterday, whose Isha window can still be open.
-      for (let dayOffset = -1; dayOffset < 7; dayOffset++) {
+      for (let dayOffset = -1; dayOffset < MAX_DAYS_TO_SCHEDULE; dayOffset++) {
         for (const minutes of END_REMINDER_OPTIONS) {
-          ids.push(getEndReminderNotificationId(prayer, dayOffset, minutes));
+          own.push(getEndReminderNotificationId(prayer, dayOffset, minutes));
         }
       }
-    }
-    for (const id of ids) {
-      expect(id).toBeGreaterThanOrEqual(1);
-      expect(id).toBeLessThanOrEqual(999);
+      for (const id of own) {
+        expect(prayerForNotificationId(id)).toBe(prayer);
+      }
+      ids.push(...own);
     }
     expect(new Set(ids).size).toBe(ids.length);
   });
 
   it('keep the prayer recoverable from the id, like the existing ones', () => {
-    // The click listener and per-prayer cancel both read the hundreds digit.
-    expect(Math.floor(getEndReminderNotificationId('asr', 6, 60) / 100) * 100).toBe(400);
-    expect(Math.floor(getEndReminderNotificationId('fajr', -1, 5) / 100) * 100).toBe(100);
+    // The click listener and per-prayer cancel both read the prayer off the id.
+    expect(prayerForNotificationId(getEndReminderNotificationId('asr', 29, 60))).toBe('asr');
+    expect(prayerForNotificationId(getEndReminderNotificationId('fajr', -1, 5))).toBe('fajr');
   });
 });
