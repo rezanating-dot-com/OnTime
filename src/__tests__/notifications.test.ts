@@ -12,6 +12,7 @@ function makeSettings(overrides: Partial<Settings> = {}): Settings {
       enabled: true,
       defaultSound: 'default',
       defaultReminderMinutes: 15,
+      reminderSound: { kind: 'default' },
       prayers: {
         fajr: { enabled: true, reminderMinutes: 15, atPrayerTime: true, sound: 'default', endReminderMinutes: [] },
         sunrise: { enabled: false, reminderMinutes: 0, atPrayerTime: false, sound: 'default', endReminderMinutes: [] },

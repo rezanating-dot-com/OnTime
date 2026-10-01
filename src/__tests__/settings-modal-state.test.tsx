@@ -275,6 +275,7 @@ describe('Deleting a downloaded athan (NT-7)', () => {
       enabled: true,
       defaultSound: 'default',
       defaultReminderMinutes: 15,
+      reminderSound: { kind: 'default' },
       prayers: {
         fajr: { enabled: true, reminderMinutes: 15, atPrayerTime: true, sound: 'athan:a', endReminderMinutes: [] },
         sunrise: { enabled: false, reminderMinutes: 0, atPrayerTime: false, sound: 'default', endReminderMinutes: [] },

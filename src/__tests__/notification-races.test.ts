@@ -37,6 +37,7 @@ function makeSettings(overrides: Partial<Settings> = {}): Settings {
       enabled: true,
       defaultSound: 'default',
       defaultReminderMinutes: 10,
+      reminderSound: { kind: 'default' },
       prayers: {
         fajr: { enabled: false, reminderMinutes: 0, atPrayerTime: false, sound: 'default', endReminderMinutes: [] },
         sunrise: { enabled: false, reminderMinutes: 0, atPrayerTime: false, sound: 'default', endReminderMinutes: [] },
@@ -187,6 +188,7 @@ describe('cross-category isolation', () => {
         enabled: true,
         defaultSound: 'default',
         defaultReminderMinutes: 10,
+        reminderSound: { kind: 'default' },
         prayers: {
           fajr: { enabled: true, reminderMinutes: 10, atPrayerTime: true, sound: 'default', endReminderMinutes: [] },
           sunrise: { enabled: false, reminderMinutes: 0, atPrayerTime: false, sound: 'default', endReminderMinutes: [] },

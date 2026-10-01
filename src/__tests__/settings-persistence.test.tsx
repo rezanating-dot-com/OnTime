@@ -132,6 +132,33 @@ describe('User story: My settings persist across app restarts', () => {
     expect(captured!.notifications.prayers.fajr.endReminderMinutes).toEqual([]);
   });
 
+  it('gives profiles saved before the reminder sound existed the Default sound', async () => {
+    vi.mocked(Preferences.get).mockResolvedValue({
+      value: JSON.stringify({ notifications: { enabled: true, defaultSound: 'adhan' } }),
+    });
+
+    let captured: Settings | null = null;
+    await act(async () => {
+      renderSettingsInspector((s) => { captured = s; });
+    });
+
+    expect(captured!.notifications.defaultSound).toBe('adhan');
+    expect(captured!.notifications.reminderSound).toEqual({ kind: 'default' });
+  });
+
+  it('drops a damaged reminder sound back to Default rather than post to a missing channel', async () => {
+    vi.mocked(Preferences.get).mockResolvedValue({
+      value: JSON.stringify({ notifications: { enabled: true, reminderSound: { kind: 'system', title: 'Ping' } } }),
+    });
+
+    let captured: Settings | null = null;
+    await act(async () => {
+      renderSettingsInspector((s) => { captured = s; });
+    });
+
+    expect(captured!.notifications.reminderSound).toEqual({ kind: 'default' });
+  });
+
   it('handles corrupted saved data gracefully (falls back to defaults)', async () => {
     vi.mocked(Preferences.get).mockResolvedValue({ value: 'not-valid-json{{{' });
 

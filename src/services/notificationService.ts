@@ -1,6 +1,8 @@
 import { LocalNotifications, type Importance, type ScheduleOptions } from '@capacitor/local-notifications';
-import type { PrayerName, AllPrayerNames, Settings, NotificationSound, JumuahSettings, SurahKahfSettings, AthanSettings, Coordinates, NotificationCategory } from '../types';
+import type { PrayerName, AllPrayerNames, Settings, NotificationSound, JumuahSettings, SurahKahfSettings, AthanSettings, Coordinates, NotificationCategory, ReminderSound } from '../types';
 import { calculatePrayerTimes, isValidPrayerTime } from './prayerService';
+import { AthanPlugin } from '../plugins/athanPlugin';
+import { reminderChannelNameFor } from './reminderSoundService';
 
 /**
  * Notification ID ranges (do not reuse):
@@ -277,6 +279,51 @@ function resolveChannelId(
   return BUILT_IN_SOUNDS.default.channelId;
 }
 
+/**
+ * Make sure the channel for a phone reminder sound exists before anything is
+ * posted to it. Android ignores a repeat creation, so this is cheap, and it
+ * covers a profile restored onto a new install, where the settings come back
+ * but the channel does not — and Android silently drops a notification posted
+ * to a channel that does not exist.
+ *
+ * Resolves false when there is no phone sound, or the channel could not be
+ * made (off Android, or the sound is gone), and reminders then fall back to
+ * the plain channel rather than be lost.
+ */
+async function ensureReminderSoundChannel(reminderSound: ReminderSound): Promise<boolean> {
+  if (reminderSound.kind !== 'system') return false;
+  try {
+    await AthanPlugin.createSoundChannel({
+      channelId: reminderSound.channelId,
+      channelName: reminderChannelNameFor(reminderSound.title),
+      soundUri: reminderSound.uri,
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The channel a prayer's reminders post to — the one before the prayer and
+ * the "before it ends" ones. They are nudges, not a call to prayer, so they
+ * never play the athan: the user's reminder sound, or silence when either it
+ * or the prayer itself is silent.
+ */
+function resolveReminderChannelId(
+  prayerSound: NotificationSound,
+  reminderSound: ReminderSound,
+  phoneSoundReady: boolean,
+): string {
+  if (prayerSound === 'silent' || reminderSound.kind === 'silent') {
+    return BUILT_IN_SOUNDS.silent.channelId;
+  }
+  if (reminderSound.kind === 'system' && phoneSoundReady) {
+    return reminderSound.channelId;
+  }
+  return BUILT_IN_SOUNDS.default.channelId;
+}
+
 // ID range boundaries for each notification category
 const CATEGORY_RANGES: Record<NotificationCategory, [number, number]> = {
   prayer: [1, 999],
@@ -322,6 +369,8 @@ export async function scheduleNotifications(
   // Channels carry the sound on Android 8+, so they have to exist before any
   // notification that names one is posted.
   await ensureBuiltInSoundChannels();
+  const reminderSound = settings.notifications.reminderSound;
+  const phoneSoundReady = await ensureReminderSoundChannel(reminderSound);
 
   // Cancel only prayer-range notifications, not other categories
   await cancelByCategory('prayer');
@@ -366,6 +415,7 @@ export async function scheduleNotifications(
       if (!prayerSettings.enabled) continue;
 
       const prayerTime = new Date(prayer.time);
+      const reminderChannelId = resolveReminderChannelId(prayerSettings.sound, reminderSound, phoneSoundReady);
 
       // Schedule reminder notification (X minutes before). Yesterday is only
       // walked for the end reminders: every start time of a past day is past.
@@ -373,8 +423,6 @@ export async function scheduleNotifications(
         const reminderTime = new Date(prayerTime.getTime() - prayerSettings.reminderMinutes * 60000);
 
         if (reminderTime > now) {
-          const sound = getSoundForNotification(prayerSettings.sound);
-          const channelId = resolveChannelId(prayer.name, prayerSettings.sound, settings.athan);
           notifications.push({
             id: getNotificationId(prayer.name, dayOffset, false),
             title: prayer.label,
@@ -383,10 +431,10 @@ export async function scheduleNotifications(
               at: reminderTime,
               allowWhileIdle: true,
             },
-            sound: sound || 'default',
-            channelId,
+            sound: 'default',
+            channelId: reminderChannelId,
             smallIcon: 'ic_stat_icon',
-              });
+          });
         }
       }
 
@@ -411,12 +459,6 @@ export async function scheduleNotifications(
       // Schedule "before it ends" reminders (X minutes before the window closes)
       const end = windowEnd[prayer.name];
       if (end && isValidPrayerTime(end) && prayerSettings.endReminderMinutes.length > 0) {
-        // A nudge that the window is closing, not a call to prayer: the plain
-        // notification sound rather than the athan, silent only if the prayer
-        // itself is silent.
-        const endSound: NotificationSound = prayerSettings.sound === 'silent' ? 'silent' : 'default';
-        const sound = getSoundForNotification(endSound);
-        const channelId = resolveChannelId(prayer.name, endSound, settings.athan);
         for (const minutes of END_REMINDER_OPTIONS) {
           if (!prayerSettings.endReminderMinutes.includes(minutes)) continue;
           const reminderTime = new Date(end.getTime() - minutes * 60000);
@@ -432,8 +474,8 @@ export async function scheduleNotifications(
               at: reminderTime,
               allowWhileIdle: true,
             },
-            sound: sound || 'default',
-            channelId,
+            sound: 'default',
+            channelId: reminderChannelId,
             smallIcon: 'ic_stat_icon',
           });
         }

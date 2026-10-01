@@ -1,5 +1,6 @@
 package com.ontimeapp.prayer;
 
+import android.app.Activity;
 import android.app.AlarmManager;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -12,17 +13,21 @@ import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 import android.media.AudioAttributes;
 import android.media.MediaPlayer;
+import android.media.Ringtone;
+import android.media.RingtoneManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.PowerManager;
 import android.provider.Settings;
 
+import androidx.activity.result.ActivityResult;
 import androidx.core.content.FileProvider;
 
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
+import com.getcapacitor.annotation.ActivityCallback;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
 import java.io.File;
@@ -243,6 +248,126 @@ public class AthanPlugin extends Plugin implements SensorEventListener {
             channel.setLockscreenVisibility(android.app.Notification.VISIBILITY_PUBLIC);
 
             manager.createNotificationChannel(channel);
+        }
+
+        call.resolve();
+    }
+
+    /**
+     * Opens Android's own notification-sound picker, which previews each sound
+     * as it is tapped. `existing` marks the sound in use: "default", "silent",
+     * or a sound's content URI. Resolves { cancelled: true } when backed out
+     * of, otherwise { kind: "default" | "silent" } or
+     * { kind: "system", uri, title }.
+     */
+    @PluginMethod
+    public void pickNotificationSound(PluginCall call) {
+        String existing = call.getString("existing", "default");
+        Uri existingUri;
+        if ("default".equals(existing)) {
+            existingUri = Settings.System.DEFAULT_NOTIFICATION_URI;
+        } else if ("silent".equals(existing)) {
+            existingUri = null;
+        } else {
+            existingUri = Uri.parse(existing);
+        }
+
+        Intent intent = new Intent(RingtoneManager.ACTION_RINGTONE_PICKER);
+        intent.putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE, RingtoneManager.TYPE_NOTIFICATION);
+        intent.putExtra(RingtoneManager.EXTRA_RINGTONE_TITLE, "Reminder sound");
+        intent.putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT, true);
+        intent.putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, true);
+        intent.putExtra(RingtoneManager.EXTRA_RINGTONE_DEFAULT_URI, Settings.System.DEFAULT_NOTIFICATION_URI);
+        intent.putExtra(RingtoneManager.EXTRA_RINGTONE_EXISTING_URI, existingUri);
+        startActivityForResult(call, intent, "pickNotificationSoundResult");
+    }
+
+    @ActivityCallback
+    private void pickNotificationSoundResult(PluginCall call, ActivityResult result) {
+        if (call == null) {
+            return;
+        }
+        JSObject ret = new JSObject();
+        Intent data = result.getData();
+        if (result.getResultCode() != Activity.RESULT_OK || data == null) {
+            ret.put("cancelled", true);
+            call.resolve(ret);
+            return;
+        }
+
+        Uri picked;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            picked = data.getParcelableExtra(RingtoneManager.EXTRA_RINGTONE_PICKED_URI, Uri.class);
+        } else {
+            picked = data.getParcelableExtra(RingtoneManager.EXTRA_RINGTONE_PICKED_URI);
+        }
+
+        ret.put("cancelled", false);
+        if (picked == null) {
+            // "None" in the picker.
+            ret.put("kind", "silent");
+        } else if (RingtoneManager.isDefault(picked)) {
+            ret.put("kind", "default");
+        } else {
+            ret.put("kind", "system");
+            ret.put("uri", picked.toString());
+            ret.put("title", soundTitle(picked));
+        }
+        call.resolve(ret);
+    }
+
+    private String soundTitle(Uri uri) {
+        try {
+            Ringtone ringtone = RingtoneManager.getRingtone(getContext(), uri);
+            if (ringtone != null) {
+                String title = ringtone.getTitle(getContext());
+                if (title != null && !title.isEmpty()) {
+                    return title;
+                }
+            }
+        } catch (Exception ignored) {
+            // Fall through to a generic name; the sound itself still works.
+        }
+        return "Phone sound";
+    }
+
+    /**
+     * A high-importance channel that plays one of the phone's own sounds.
+     * Unlike createAthanChannel there is no file to hand over: a sound from the
+     * picker is already a media URI SystemUI can read.
+     */
+    @PluginMethod
+    public void createSoundChannel(PluginCall call) {
+        String channelId = call.getString("channelId");
+        String channelName = call.getString("channelName");
+        String soundUri = call.getString("soundUri");
+
+        if (channelId == null || channelName == null || soundUri == null) {
+            call.reject("channelId, channelName, and soundUri are required");
+            return;
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            try {
+                NotificationManager manager = (NotificationManager)
+                        getContext().getSystemService(Context.NOTIFICATION_SERVICE);
+
+                AudioAttributes audioAttributes = new AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .build();
+
+                NotificationChannel channel = new NotificationChannel(
+                        channelId, channelName, NotificationManager.IMPORTANCE_HIGH);
+                channel.setSound(Uri.parse(soundUri), audioAttributes);
+                channel.enableVibration(true);
+                channel.setLockscreenVisibility(android.app.Notification.VISIBILITY_PUBLIC);
+
+                manager.createNotificationChannel(channel);
+            } catch (Exception e) {
+                call.reject("Failed to create sound channel: " + e.getMessage());
+                return;
+            }
         }
 
         call.resolve();

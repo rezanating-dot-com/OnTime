@@ -49,6 +49,7 @@ function makeSettings(
       enabled: true,
       defaultSound: 'default',
       defaultReminderMinutes: 15,
+      reminderSound: { kind: 'default' },
       prayers: {
         fajr: prayer(prayers.fajr),
         sunrise: prayer({ enabled: false, ...prayers.sunrise }),

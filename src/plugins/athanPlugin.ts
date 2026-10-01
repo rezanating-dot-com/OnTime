@@ -1,6 +1,12 @@
 import { registerPlugin } from '@capacitor/core';
 import type { PluginListenerHandle } from '@capacitor/core';
 
+export type PickedNotificationSound =
+  | { cancelled: true }
+  | { cancelled: false; kind: 'default' }
+  | { cancelled: false; kind: 'silent' }
+  | { cancelled: false; kind: 'system'; uri: string; title: string };
+
 export interface AthanPluginInterface {
   createAthanChannel(options: {
     channelId: string;
@@ -9,6 +15,19 @@ export interface AthanPluginInterface {
   }): Promise<void>;
 
   deleteChannel(options: { channelId: string }): Promise<void>;
+
+  /**
+   * Open Android's own notification-sound picker. `existing` marks the sound
+   * in use: 'default', 'silent', or a sound's content URI. Android only.
+   */
+  pickNotificationSound(options: { existing: string }): Promise<PickedNotificationSound>;
+
+  /** A high-importance notification channel that plays the sound at `soundUri`. Android only. */
+  createSoundChannel(options: {
+    channelId: string;
+    channelName: string;
+    soundUri: string;
+  }): Promise<void>;
 
   playPreview(options: { filePath: string }): Promise<void>;
 
