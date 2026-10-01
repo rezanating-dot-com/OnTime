@@ -18,6 +18,18 @@ function canLocate(status: { location?: string; coarseLocation?: string }): bool
   return status.location === 'granted' || status.coarseLocation === 'granted';
 }
 
+async function loadSavedLocation(): Promise<LocationData | null> {
+  try {
+    const { value } = await Preferences.get({ key: LOCATION_KEY });
+    if (value) {
+      return JSON.parse(value) as LocationData;
+    }
+  } catch (err) {
+    console.error('Failed to load saved location:', err);
+  }
+  return null;
+}
+
 /** Shown for the moment between getting a GPS fix and learning its name. */
 const LOCATING_LABEL = 'Locating…';
 
@@ -52,30 +64,15 @@ export function LocationProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Load the saved location once; onboarding handles the first GPS request.
   useEffect(() => {
-    initializeLocation();
-  }, []);
-
-  async function initializeLocation() {
-    // Try to load saved location — onboarding handles initial GPS request
-    const savedLocation = await loadSavedLocation();
-    if (savedLocation) {
-      setLocation(savedLocation);
-    }
-    setIsLoading(false);
-  }
-
-  async function loadSavedLocation(): Promise<LocationData | null> {
-    try {
-      const { value } = await Preferences.get({ key: LOCATION_KEY });
-      if (value) {
-        return JSON.parse(value) as LocationData;
+    loadSavedLocation().then((savedLocation) => {
+      if (savedLocation) {
+        setLocation(savedLocation);
       }
-    } catch (err) {
-      console.error('Failed to load saved location:', err);
-    }
-    return null;
-  }
+      setIsLoading(false);
+    });
+  }, []);
 
   async function saveLocation(loc: LocationData) {
     try {

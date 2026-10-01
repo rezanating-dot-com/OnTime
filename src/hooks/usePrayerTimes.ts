@@ -29,7 +29,10 @@ export function usePrayerTimes() {
 
   // The device's local time changed under us — a new zone, or the same zone
   // stepping on or off DST. Force a date refresh so the next memo recalculates.
+  // The clock is the external system here, so this is the sync the rule allows
+  // for; it renders once per zone or DST change.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setDate(new Date());
   }, [localTimeKey]);
 

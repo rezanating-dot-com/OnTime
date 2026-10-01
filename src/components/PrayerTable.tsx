@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { formatTime, getTimeUntil, isValidPrayerTime } from '../services/prayerService';
+import { formatTime, isValidPrayerTime, rowCountdownLabel } from '../services/prayerService';
 import { useSettings } from '../context/SettingsContext';
 import { useTravel } from '../context/TravelContext';
 import type { PrayerTime, PrayerName, AllPrayerNames, TravelState } from '../types';
@@ -277,7 +277,6 @@ interface PrayerRowProps {
 }
 
 function PrayerRow({ prayer, isHighlighted, isSelected, onTap, travelState, sunnahPrayers }: PrayerRowProps) {
-  const [countdown, setCountdown] = useState<string>('');
 
   const formattedTime = formatTime(prayer.time);
   const timeParts = formattedTime.match(/(\d+:\d+)\s*(AM|PM)/i);
@@ -290,43 +289,15 @@ function PrayerRow({ prayer, isHighlighted, isSelected, onTap, travelState, sunn
   const prayerKey = prayer.name as PrayerName;
   const showQasr = travelState.isTraveling && travelState.qasr[prayerKey as keyof typeof travelState.qasr];
 
-  // Update countdown when selected
+  // While the row is selected, re-render once a second so its countdown,
+  // worked out fresh on each render, stays live.
+  const [, tick] = useState(0);
   useEffect(() => {
-    // A prayer that doesn't occur at this latitude — midnight sun or polar
-    // night — arrives as Invalid Date. Every comparison against NaN is false,
-    // so it slips past `prayerTime <= now` and every branch below and lands on
-    // "< 1 min", re-set every second forever. The time column already renders an
-    // em dash for it, so there is nothing here to count down to.
-    if (!isSelected || !isValidPrayerTime(prayer.time)) {
-      setCountdown('');
-      return;
-    }
-
-    const updateCountdown = () => {
-      const now = new Date();
-      const prayerTime = prayer.time;
-
-      if (prayerTime <= now) {
-        setCountdown('Passed');
-        return;
-      }
-
-      const { hours, minutes } = getTimeUntil(prayerTime);
-      
-      if (hours > 0) {
-        setCountdown(`${hours}h ${minutes}m left`);
-      } else if (minutes > 0) {
-        setCountdown(`${minutes} min left`);
-      } else {
-        setCountdown('< 1 min');
-      }
-    };
-
-    updateCountdown();
-    const interval = setInterval(updateCountdown, 1000);
-
+    if (!isSelected || !isValidPrayerTime(prayer.time)) return;
+    const interval = setInterval(() => tick((n) => n + 1), 1000);
     return () => clearInterval(interval);
   }, [isSelected, prayer.time]);
+  const countdown = isSelected ? rowCountdownLabel(prayer.time) : '';
 
   // Either half of the row toggles the countdown. A passed row reads "Passed"
   // rather than going dead to the tap.

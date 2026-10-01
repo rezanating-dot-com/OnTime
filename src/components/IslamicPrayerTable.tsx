@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { formatTime, getTimeUntil, isValidPrayerTime } from '../services/prayerService';
+import { formatTime, isValidPrayerTime, rowCountdownLabel } from '../services/prayerService';
 import { useSettings } from '../context/SettingsContext';
 import { useTravel } from '../context/TravelContext';
 import { KhatamStar, GirihBackground } from './IslamicPatterns';
@@ -309,7 +309,6 @@ interface IslamicPrayerRowProps {
 }
 
 function IslamicPrayerRow({ prayer, isHighlighted, isSelected, onTap, travelState }: IslamicPrayerRowProps) {
-  const [countdown, setCountdown] = useState<string>('');
 
   const formattedTime = formatTime(prayer.time);
   const timeParts = formattedTime.match(/(\d+:\d+)\s*(AM|PM)/i);
@@ -328,22 +327,15 @@ function IslamicPrayerRow({ prayer, isHighlighted, isSelected, onTap, travelStat
   const showQasr = travelState.isTraveling && travelState.qasr[prayer.name as keyof typeof travelState.qasr];
   const arabic = ARABIC_NAMES[prayer.name];
 
+  // While the row is selected, re-render once a second so its countdown,
+  // worked out fresh on each render, stays live.
+  const [, tick] = useState(0);
   useEffect(() => {
-    // Invalid Date where the prayer doesn't occur at this latitude: NaN fails
-    // every comparison below, so the row would sit on "< 1 min" forever. The
-    // time column already renders an em dash. See the PrayerTable equivalent.
-    if (!isSelected || !isValidPrayerTime(prayer.time)) { setCountdown(''); return; }
-    const updateCountdown = () => {
-      if (prayer.time <= new Date()) { setCountdown('Passed'); return; }
-      const { hours, minutes } = getTimeUntil(prayer.time);
-      if (hours > 0) setCountdown(`${hours}h ${minutes}m left`);
-      else if (minutes > 0) setCountdown(`${minutes} min left`);
-      else setCountdown('< 1 min');
-    };
-    updateCountdown();
-    const interval = setInterval(updateCountdown, 1000);
+    if (!isSelected || !isValidPrayerTime(prayer.time)) return;
+    const interval = setInterval(() => tick((n) => n + 1), 1000);
     return () => clearInterval(interval);
   }, [isSelected, prayer.time]);
+  const countdown = isSelected ? rowCountdownLabel(prayer.time) : '';
 
   // Either half of the row toggles the countdown. A passed row reads "Passed"
   // rather than going dead to the tap.

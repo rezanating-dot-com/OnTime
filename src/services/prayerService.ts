@@ -228,6 +228,22 @@ export function formatTime(date: Date): string {
   });
 }
 
+/**
+ * The countdown a selected prayer row shows: "2h 5m left", "12 min left",
+ * "< 1 min" or "Passed". A prayer that doesn't occur at this latitude
+ * (midnight sun or polar night) arrives as Invalid Date, which fails every
+ * comparison and would otherwise read "< 1 min" forever; it gets nothing,
+ * since its time column already shows a dash.
+ */
+export function rowCountdownLabel(targetTime: Date): string {
+  if (!isValidPrayerTime(targetTime)) return '';
+  if (targetTime <= new Date()) return 'Passed';
+  const { hours, minutes } = getTimeUntil(targetTime);
+  if (hours > 0) return `${hours}h ${minutes}m left`;
+  if (minutes > 0) return `${minutes} min left`;
+  return '< 1 min';
+}
+
 export function getTimeUntil(targetTime: Date): {
   hours: number;
   minutes: number;

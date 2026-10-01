@@ -185,6 +185,9 @@ export function TravelProvider({ children }: { children: ReactNode }) {
     if (travel.autoConfirmed || travel.promptDismissed) {
       updateTravel({ autoConfirmed: false, travelStartDate: null, promptDismissed: false });
     }
+    // Arriving home ends this session's "not now" too. It reacts to a GPS fix,
+    // not to render, and only renders again when it was set.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (dismissed) setDismissed(false);
   }, [travel, location, updateTravel, dismissed]);
 
