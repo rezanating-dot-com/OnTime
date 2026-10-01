@@ -87,10 +87,23 @@ export interface PrayerNotificationSettings {
   endReminderMinutes: number[];
 }
 
+/**
+ * The sound every prayer reminder plays — the one before the prayer and the
+ * "before it ends" ones. A prayer's own `sound` plays at prayer time only.
+ * `system` is one of the phone's own notification sounds, picked with
+ * Android's sound picker and posted through a channel made for it, because
+ * on Android 8+ a channel's sound is fixed when the channel is created.
+ */
+export type ReminderSound =
+  | { kind: 'default' }
+  | { kind: 'silent' }
+  | { kind: 'system'; uri: string; title: string; channelId: string };
+
 export interface NotificationSettings {
   enabled: boolean;
   defaultSound: NotificationSound;
   defaultReminderMinutes: number;
+  reminderSound: ReminderSound;
   prayers: Record<PrayerName, PrayerNotificationSettings>;
 }
 

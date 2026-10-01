@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback, useMemo, type ReactNode } from 'react';
 import { Preferences } from '@capacitor/preferences';
-import type { Settings, CalculationMethod, AsrCalculation, PrayerName, OptionalPrayersSettings, PrayerNotificationSettings, NotificationSound, JumuahSettings, SurahKahfSettings, TravelSettings, DisplaySettings, AthanSettings, SavedLocation, DesignStyle } from '../types';
+import type { Settings, CalculationMethod, AsrCalculation, PrayerName, OptionalPrayersSettings, PrayerNotificationSettings, NotificationSound, JumuahSettings, SurahKahfSettings, TravelSettings, DisplaySettings, AthanSettings, SavedLocation, DesignStyle, ReminderSound } from '../types';
 
 const SETTINGS_KEY = 'ontime_settings';
 
@@ -17,6 +17,32 @@ const defaultPrayerNotification: PrayerNotificationSettings = {
   sound: 'default',
   endReminderMinutes: [],
 };
+
+const defaultReminderSound: ReminderSound = { kind: 'default' };
+
+/**
+ * A stored reminder sound, or Default if it is missing or damaged. A phone
+ * sound without its uri or channel id would post reminders to a channel that
+ * cannot exist, which Android drops without a sound or a trace.
+ */
+function readReminderSound(stored: unknown): ReminderSound {
+  if (!stored || typeof stored !== 'object') return defaultReminderSound;
+  const s = stored as Record<string, unknown>;
+  if (s.kind === 'default' || s.kind === 'silent') return { kind: s.kind };
+  if (
+    s.kind === 'system' &&
+    typeof s.uri === 'string' && s.uri &&
+    typeof s.channelId === 'string' && s.channelId
+  ) {
+    return {
+      kind: 'system',
+      uri: s.uri,
+      channelId: s.channelId,
+      title: typeof s.title === 'string' && s.title ? s.title : 'Phone sound',
+    };
+  }
+  return defaultReminderSound;
+}
 
 const defaultJumuahSettings: JumuahSettings = {
   enabled: false,
@@ -71,6 +97,7 @@ const defaultSettings: Settings = {
     enabled: true,
     defaultSound: 'default',
     defaultReminderMinutes: 15,
+    reminderSound: defaultReminderSound,
     prayers: {
       fajr: { ...defaultPrayerNotification, sound: 'adhan_fajr' },
       sunrise: { ...defaultPrayerNotification, enabled: false },
@@ -100,6 +127,7 @@ interface SettingsContextType {
   updateDefaultSound: (sound: NotificationSound) => void;
   updateDefaultReminderMinutes: (minutes: number) => void;
   updatePrayerNotification: (prayer: PrayerName, updates: Partial<PrayerNotificationSettings>) => void;
+  updateReminderSound: (sound: ReminderSound) => void;
   updateJumuah: (updates: Partial<JumuahSettings>) => void;
   updateTravel: (updates: Partial<TravelSettings>) => void;
   updateSurahKahf: (updates: Partial<SurahKahfSettings>) => void;
@@ -198,6 +226,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
           notifications: {
             ...defaultSettings.notifications,
             ...parsed.notifications,
+            reminderSound: readReminderSound(parsed.notifications?.reminderSound),
             prayers: migratedPrayers,
           },
           jumuah: {
@@ -303,6 +332,13 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     }));
   }, []);
 
+  const updateReminderSound = useCallback((sound: ReminderSound) => {
+    setSettings((prev) => ({
+      ...prev,
+      notifications: { ...prev.notifications, reminderSound: sound },
+    }));
+  }, []);
+
   const updateJumuah = useCallback((updates: Partial<JumuahSettings>) => {
     setSettings((prev) => ({
       ...prev,
@@ -404,6 +440,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     updateDefaultSound,
     updateDefaultReminderMinutes,
     updatePrayerNotification,
+    updateReminderSound,
     updateJumuah,
     updateTravel,
     updateSurahKahf,
@@ -425,6 +462,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     updateDefaultSound,
     updateDefaultReminderMinutes,
     updatePrayerNotification,
+    updateReminderSound,
     updateJumuah,
     updateTravel,
     updateSurahKahf,

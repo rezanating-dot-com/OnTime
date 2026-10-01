@@ -40,6 +40,7 @@ function makeSettings(sound: NotificationSound, athan: AthanSettings = defaultAt
       enabled: true,
       defaultSound: sound,
       defaultReminderMinutes: 15,
+      reminderSound: { kind: 'default' },
       prayers: prayerSettings(sound),
     },
     jumuah: { enabled: false, masjidName: '', times: [], reminderMinutes: 30 },
@@ -121,14 +122,19 @@ describe('built-in notification sound channels', () => {
     expect(await channelsFor('silent')).not.toEqual(await channelsFor('default'));
   });
 
-  it('still prefers a downloaded athan over the built-in channels', async () => {
+  it('still prefers a downloaded athan over the built-in channels at prayer time', async () => {
     const athan: AthanSettings = {
       ...defaultAthanSettings,
       selectedAthanId: 'abc123',
       currentChannelId: 'athan_main_abc123',
     };
 
-    expect(await channelsFor('adhan', athan)).toEqual(['athan_main_abc123']);
+    // Reminders never play the athan; they follow the reminder sound, which
+    // is covered in reminder-sound.test.ts.
+    await channelsFor('adhan', athan);
+    const atTime = scheduled.filter((n) => String(n.body).startsWith('Time for'));
+    expect(atTime.length).toBeGreaterThan(0);
+    expect([...new Set(atTime.map((n) => n.channelId))]).toEqual(['athan_main_abc123']);
   });
 
   it('routes Fajr to the dedicated Fajr athan channel when one is selected', async () => {
@@ -142,7 +148,7 @@ describe('built-in notification sound channels', () => {
 
     await scheduleNotifications(TORONTO, makeSettings('adhan_fajr', athan));
 
-    const fajr = scheduled.filter((n) => String(n.title).toLowerCase().includes('fajr'));
+    const fajr = scheduled.filter((n) => n.title === 'Fajr' && String(n.body).startsWith('Time for'));
     expect(fajr.length).toBeGreaterThan(0);
     expect(fajr.every((n) => n.channelId === 'athan_fajr_def456')).toBe(true);
   });

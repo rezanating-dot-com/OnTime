@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback, useRef, type MutableRefObject } from 'react';
+import { Capacitor } from '@capacitor/core';
 import { useSettings } from '../context/SettingsContext';
 import { useTheme } from '../context/ThemeContext';
 import { useLocation } from '../context/LocationContext';
 import { useTravel } from '../context/TravelContext';
 import { CALCULATION_METHODS } from '../services/prayerService';
 import { MAX_JUMUAH_TIMES, END_REMINDER_OPTIONS } from '../services/notificationService';
+import { chooseReminderSound } from '../services/reminderSoundService';
 import { CitySearch } from './CitySearch';
 import {
   fetchAthanCatalog,
@@ -16,7 +18,7 @@ import {
 } from '../services/athanService';
 import { AthanPlugin } from '../plugins/athanPlugin';
 import { formatDistance } from '../utils/distance';
-import type { CalculationMethod, PrayerName, NotificationSound, CityEntry, AthanCatalogEntry, AthanFile } from '../types';
+import type { CalculationMethod, PrayerName, NotificationSound, CityEntry, AthanCatalogEntry, AthanFile, ReminderSound } from '../types';
 
 type SettingsCategory = 'main' | 'location' | 'calculation' | 'appearance' | 'notifications' | 'notifications-prayers' | 'notifications-athan' | 'notifications-jumuah' | 'notifications-kahf' | 'travel' | 'about' | 'travel-home-search' | 'athan-catalog';
 
@@ -48,6 +50,11 @@ const REMINDER_OPTIONS = [
   { value: 30, label: '30 min' },
 ];
 
+function reminderSoundLabel(sound: ReminderSound): string {
+  if (sound.kind === 'system') return sound.title;
+  return sound.kind === 'silent' ? 'Silent' : 'Default';
+}
+
 /** Add or remove one lead time, keeping the stored list in a fixed order. */
 function toggleEndReminder(current: number[], minutes: number): number[] {
   const next = current.includes(minutes)
@@ -72,6 +79,7 @@ export function SettingsModal({ isOpen, onClose, onBackRef }: SettingsModalProps
     updateOptionalPrayers,
     updateNotifications,
     updatePrayerNotification,
+    updateReminderSound,
     updateJumuah,
     updateSurahKahf,
     updateDisplay,
@@ -102,6 +110,24 @@ export function SettingsModal({ isOpen, onClose, onBackRef }: SettingsModalProps
   const [catalogError, setCatalogError] = useState<string | null>(null);
   const [previewingId, setPreviewingId] = useState<string | null>(null);
   const [athanSelectError, setAthanSelectError] = useState<string | null>(null);
+  const [reminderSoundError, setReminderSoundError] = useState<string | null>(null);
+  const [pickingReminderSound, setPickingReminderSound] = useState(false);
+  // App alerts can only use the phone's own sounds on Android.
+  const canPickPhoneSound = Capacitor.getPlatform() === 'android';
+
+  const handlePickReminderSound = async () => {
+    if (pickingReminderSound) return;
+    setReminderSoundError(null);
+    setPickingReminderSound(true);
+    try {
+      const next = await chooseReminderSound(settings.notifications.reminderSound);
+      if (next) updateReminderSound(next);
+    } catch {
+      setReminderSoundError("Couldn't use that sound for reminders. The previous sound is still set.");
+    } finally {
+      setPickingReminderSound(false);
+    }
+  };
   const [useSeparateFajr, setUseSeparateFajr] = useState(
     settings.athan.selectedFajrAthanId !== null && settings.athan.selectedFajrAthanId !== settings.athan.selectedAthanId
   );
@@ -1105,6 +1131,30 @@ export function SettingsModal({ isOpen, onClose, onBackRef }: SettingsModalProps
               <p className="text-sm text-[var(--color-muted)]">
                 Configure notifications for each prayer
               </p>
+              {canPickPhoneSound && (
+                <button
+                  type="button"
+                  onClick={handlePickReminderSound}
+                  aria-label={`Reminder sound: ${reminderSoundLabel(settings.notifications.reminderSound)}`}
+                  className="flex items-center gap-3 p-4 rounded-lg bg-[var(--color-card)] hover:bg-[var(--color-border)] transition-colors text-left w-full"
+                >
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-[var(--color-text)]">Reminder sound</p>
+                    <p className="text-sm text-[var(--color-muted)]">Before each prayer and before it ends</p>
+                  </div>
+                  <span className="text-sm text-[var(--color-text)] truncate max-w-[40%]">
+                    {reminderSoundLabel(settings.notifications.reminderSound)}
+                  </span>
+                  <svg className="w-5 h-5 flex-shrink-0 text-[var(--color-muted)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+              )}
+              {reminderSoundError && (
+                <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20">
+                  <p className="text-red-500 text-sm">{reminderSoundError}</p>
+                </div>
+              )}
               <p className="text-xs text-[var(--color-muted)]">
                 "Before it ends" counts Fajr as ending at sunrise and Isha at Islamic midnight.
               </p>

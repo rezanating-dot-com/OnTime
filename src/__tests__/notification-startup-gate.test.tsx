@@ -113,6 +113,7 @@ describe('a denied permission cleans up after itself (NT-11)', () => {
           enabled: true,
           defaultSound: 'default',
           defaultReminderMinutes: 15,
+          reminderSound: { kind: 'default' },
           prayers: {
             fajr: { enabled: true, reminderMinutes: 15, atPrayerTime: true, sound: 'default', endReminderMinutes: [] },
             sunrise: { enabled: false, reminderMinutes: 0, atPrayerTime: false, sound: 'default', endReminderMinutes: [] },
