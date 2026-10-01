@@ -254,7 +254,7 @@ export function HomeGlobeScreen({
         >
           <div className="text-base font-medium">
             {unavailable ? (
-              <span className="text-white/80">Compass unavailable — check location permission</span>
+              <span className="text-white/80">Compass unavailable on this device</span>
             ) : !calibrated ? (
               askedLongEnough ? null : (
                 <span className="text-white/80">Hold the phone flat and sweep a figure-8</span>

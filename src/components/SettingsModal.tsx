@@ -611,11 +611,20 @@ export function SettingsModal({ isOpen, onClose, onBackRef }: SettingsModalProps
                           {/* See on map */}
                           <button
                             onClick={() => {
-                              const label = encodeURIComponent(loc.cityName);
-                              window.open(
-                                `geo:${loc.coordinates.latitude},${loc.coordinates.longitude}?q=${loc.coordinates.latitude},${loc.coordinates.longitude}(${label})`,
-                                '_system'
-                              );
+                              const { latitude, longitude } = loc.coordinates;
+                              // geo: hands off to the phone's maps app; a desktop
+                              // browser has nothing registered for it, so open
+                              // the place on OpenStreetMap there instead.
+                              if (Capacitor.isNativePlatform()) {
+                                const label = encodeURIComponent(loc.cityName);
+                                window.open(`geo:${latitude},${longitude}?q=${latitude},${longitude}(${label})`, '_system');
+                              } else {
+                                window.open(
+                                  `https://www.openstreetmap.org/?mlat=${latitude}&mlon=${longitude}#map=12/${latitude}/${longitude}`,
+                                  '_blank',
+                                  'noopener',
+                                );
+                              }
                             }}
                             className="p-2 rounded-lg hover:bg-[var(--color-background)] transition-colors"
                             title="See on map"

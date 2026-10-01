@@ -111,7 +111,8 @@ function App() {
     } else if (qiblaMode) {
       closeQibla();
     } else {
-      CapApp.minimizeApp();
+      // Not implemented in a browser, where it rejects; nothing to do there.
+      CapApp.minimizeApp().catch(() => {});
     }
   }, [qiblaMode, closeQibla]);
 
