@@ -111,6 +111,27 @@ describe('User story: My settings persist across app restarts', () => {
     expect(captured!.notifications.prayers.fajr.sound).toBeDefined();
   });
 
+  it('gives prayers saved before "before it ends" reminders existed an empty list', async () => {
+    const saved = {
+      notifications: {
+        enabled: true,
+        prayers: {
+          dhuhr: { enabled: true, reminderMinutes: 10, atPrayerTime: true, sound: 'adhan' },
+        },
+      },
+    };
+    vi.mocked(Preferences.get).mockResolvedValue({ value: JSON.stringify(saved) });
+
+    let captured: Settings | null = null;
+    await act(async () => {
+      renderSettingsInspector((s) => { captured = s; });
+    });
+
+    expect(captured!.notifications.prayers.dhuhr.reminderMinutes).toBe(10);
+    expect(captured!.notifications.prayers.dhuhr.endReminderMinutes).toEqual([]);
+    expect(captured!.notifications.prayers.fajr.endReminderMinutes).toEqual([]);
+  });
+
   it('handles corrupted saved data gracefully (falls back to defaults)', async () => {
     vi.mocked(Preferences.get).mockResolvedValue({ value: 'not-valid-json{{{' });
 

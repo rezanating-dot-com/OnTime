@@ -26,7 +26,7 @@ function prayerSettings(sound: NotificationSound): Settings['notifications']['pr
   return Object.fromEntries(
     names.map((name) => [
       name,
-      { enabled: true, reminderMinutes: 15, atPrayerTime: true, sound },
+      { enabled: true, reminderMinutes: 15, atPrayerTime: true, sound, endReminderMinutes: [] },
     ]),
   ) as Settings['notifications']['prayers'];
 }

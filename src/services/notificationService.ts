@@ -1,6 +1,6 @@
 import { LocalNotifications, type Importance, type ScheduleOptions } from '@capacitor/local-notifications';
 import type { PrayerName, AllPrayerNames, Settings, NotificationSound, JumuahSettings, SurahKahfSettings, AthanSettings, Coordinates, NotificationCategory } from '../types';
-import { calculatePrayerTimes } from './prayerService';
+import { calculatePrayerTimes, isValidPrayerTime } from './prayerService';
 
 /**
  * Notification ID ranges (do not reuse):
@@ -12,12 +12,22 @@ import { calculatePrayerTimes } from './prayerService';
  *   travel:     1300    (the "Are you traveling?" prompt in App.tsx)
  *
  * Prayer sub-ranges within 1–999:
- *   fajr:    100–199   base 100, formula: base + (dayOffset * 10) + timeOffset
+ *   fajr:    100–199   base 100, formula: base + (dayOffset * 10) + slot
  *   sunrise: 200–299   base 200
  *   dhuhr:   300–399   base 300
  *   asr:     400–499   base 400
  *   maghrib: 500–599   base 500
  *   isha:    600–699   base 600
+ *
+ * Each decade within a prayer's block, base + (decade * 10) + slot, holds:
+ *   0      reminder before the prayer         (decade = dayOffset, 0–6)
+ *   1      at prayer time                     (decade = dayOffset, 0–6)
+ *   2–8    "before it ends" reminders, one per entry of END_REMINDER_OPTIONS
+ *          (decade = dayOffset + 1, 0–7: the pass starts at yesterday, whose
+ *          Isha window can still be open after local midnight)
+ *   9      spare
+ * The block therefore reaches base + 78 at most, and the hundreds digit still
+ * names the prayer, which cancelNotification() and the click listener rely on.
  */
 
 // Base IDs for each prayer (we'll add offsets for reminder vs at-time)
@@ -49,11 +59,32 @@ export const MAX_JUMUAH_TIMES = JUMUAH_WEEK_STRIDE;
 // Offset for at-time notifications (reminder = base, at-time = base + 1)
 const AT_TIME_OFFSET = 1;
 
+/**
+ * Minutes before a prayer window closes that a user can ask to be reminded
+ * at. Capped at eight entries by the id layout above (slots 2–9); the order is
+ * the slot order, so an entry must never be moved or removed once released —
+ * that would silently change which armed alarm an id refers to.
+ */
+export const END_REMINDER_OPTIONS: readonly number[] = [5, 10, 15, 20, 30, 45, 60];
+const END_REMINDER_SLOT_BASE = 2;
+/**
+ * The end-reminder pass starts one day back: Isha's window closes at Islamic
+ * midnight, which is after local midnight, so between the two a rebuild (the
+ * day-change top-up on resume, or any settings change) would otherwise cancel
+ * last night's armed reminder and never put it back. Every other window closes
+ * the same day, so for them yesterday yields nothing.
+ */
+const END_REMINDER_FIRST_DAY = -1;
+
 // Days ahead to schedule notifications (limited by Android)
 const DAYS_TO_SCHEDULE = 7;
 
 // Weeks ahead to schedule Jumuah notifications
 const WEEKS_TO_SCHEDULE_JUMUAH = 4;
+
+function endReminderMessage(label: string, minutes: number): string {
+  return `${label} ends in ${minutes} minutes`;
+}
 
 const PRAYER_MESSAGES: Record<PrayerName, { reminder: string; atTime: string }> = {
   fajr: { reminder: 'Fajr prayer coming soon', atTime: 'Time for Fajr prayer' },
@@ -146,6 +177,18 @@ export function getNotificationId(prayer: PrayerName, dayOffset: number, isAtTim
   const baseId = PRAYER_BASE_IDS[prayer];
   const timeOffset = isAtTime ? AT_TIME_OFFSET : 0;
   return baseId + (dayOffset * 10) + timeOffset;
+}
+
+// Generate unique notification ID for a "before it ends" reminder
+export function getEndReminderNotificationId(prayer: PrayerName, dayOffset: number, minutes: number): number {
+  const slot = END_REMINDER_OPTIONS.indexOf(minutes);
+  if (slot === -1) {
+    throw new RangeError(`${minutes} is not an end reminder option`);
+  }
+  // Shifted one decade up so END_REMINDER_FIRST_DAY lands in decade 0, not in
+  // the block below.
+  const decade = dayOffset - END_REMINDER_FIRST_DAY;
+  return PRAYER_BASE_IDS[prayer] + (decade * 10) + END_REMINDER_SLOT_BASE + slot;
 }
 
 export async function requestNotificationPermission(): Promise<boolean> {
@@ -287,16 +330,34 @@ export async function scheduleNotifications(
   const notifications: ScheduleOptions['notifications'] = [];
 
   // Schedule notifications for multiple days, recalculating prayer times each day
-  for (let dayOffset = 0; dayOffset < DAYS_TO_SCHEDULE; dayOffset++) {
+  for (let dayOffset = END_REMINDER_FIRST_DAY; dayOffset < DAYS_TO_SCHEDULE; dayOffset++) {
     const targetDate = new Date(now);
     targetDate.setDate(targetDate.getDate() + dayOffset);
+    // Asked at noon: the prayer times only depend on the calendar day, but
+    // before Fajr calculatePrayerTimes hands back *last* night's sunnah times,
+    // and the Isha window has to close at the midnight that follows this
+    // evening's Isha, not the one already behind us.
+    targetDate.setHours(12, 0, 0, 0);
 
-    const { prayers } = calculatePrayerTimes(
+    const { prayers, sunnahTimes } = calculatePrayerTimes(
       coordinates,
       targetDate,
       settings.calculationMethod,
       settings.asrCalculation,
     );
+
+    const timeOf = (name: PrayerName): Date | undefined => prayers.find((p) => p.name === name)?.time;
+    // When each window closes. Sunrise is not a prayer, so it has no window to
+    // close; Isha's preferred time runs to Islamic midnight, the midpoint of
+    // the night, which is the same instant the Middle of Night row shows.
+    const windowEnd: Record<PrayerName, Date | undefined> = {
+      fajr: timeOf('sunrise'),
+      sunrise: undefined,
+      dhuhr: timeOf('asr'),
+      asr: timeOf('maghrib'),
+      maghrib: timeOf('isha'),
+      isha: sunnahTimes?.middleOfTheNight,
+    };
 
     for (const prayer of prayers) {
       if (!isCorePrayer(prayer.name)) continue;
@@ -306,8 +367,9 @@ export async function scheduleNotifications(
 
       const prayerTime = new Date(prayer.time);
 
-      // Schedule reminder notification (X minutes before)
-      if (prayerSettings.reminderMinutes > 0) {
+      // Schedule reminder notification (X minutes before). Yesterday is only
+      // walked for the end reminders: every start time of a past day is past.
+      if (dayOffset >= 0 && prayerSettings.reminderMinutes > 0) {
         const reminderTime = new Date(prayerTime.getTime() - prayerSettings.reminderMinutes * 60000);
 
         if (reminderTime > now) {
@@ -329,7 +391,7 @@ export async function scheduleNotifications(
       }
 
       // Schedule at-time notification
-      if (prayerSettings.atPrayerTime && prayerTime > now) {
+      if (dayOffset >= 0 && prayerSettings.atPrayerTime && prayerTime > now) {
         const sound = getSoundForNotification(prayerSettings.sound);
         const channelId = resolveChannelId(prayer.name, prayerSettings.sound, settings.athan);
         notifications.push({
@@ -344,6 +406,37 @@ export async function scheduleNotifications(
           channelId,
           smallIcon: 'ic_stat_icon',
           });
+      }
+
+      // Schedule "before it ends" reminders (X minutes before the window closes)
+      const end = windowEnd[prayer.name];
+      if (end && isValidPrayerTime(end) && prayerSettings.endReminderMinutes.length > 0) {
+        // A nudge that the window is closing, not a call to prayer: the plain
+        // notification sound rather than the athan, silent only if the prayer
+        // itself is silent.
+        const endSound: NotificationSound = prayerSettings.sound === 'silent' ? 'silent' : 'default';
+        const sound = getSoundForNotification(endSound);
+        const channelId = resolveChannelId(prayer.name, endSound, settings.athan);
+        for (const minutes of END_REMINDER_OPTIONS) {
+          if (!prayerSettings.endReminderMinutes.includes(minutes)) continue;
+          const reminderTime = new Date(end.getTime() - minutes * 60000);
+          // A window shorter than the lead time (Maghrib to Isha near the
+          // equator can be under 40 minutes) would otherwise announce the end
+          // of a prayer that has not begun.
+          if (reminderTime <= prayerTime || reminderTime <= now) continue;
+          notifications.push({
+            id: getEndReminderNotificationId(prayer.name, dayOffset, minutes),
+            title: prayer.label,
+            body: endReminderMessage(prayer.label, minutes),
+            schedule: {
+              at: reminderTime,
+              allowWhileIdle: true,
+            },
+            sound: sound || 'default',
+            channelId,
+            smallIcon: 'ic_stat_icon',
+          });
+        }
       }
     }
   }

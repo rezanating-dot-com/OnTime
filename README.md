@@ -18,6 +18,7 @@ A full-featured Islamic prayer times app for Android and iOS, built with React, 
 
 ### Notifications
 - Per-prayer enable/disable with configurable reminder timing (0–30 min before)
+- "Before it ends" reminders at any mix of 5–60 minutes before a prayer's window closes (Fajr at sunrise, Isha at Islamic midnight)
 - Custom athan sounds — browse, download, and preview from an online catalog
 - Separate Fajr athan selection
 - Jumu'ah (Friday prayer) reminders with masjid name, khutbah, and iqamah times

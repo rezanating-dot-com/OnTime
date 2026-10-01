@@ -276,12 +276,12 @@ describe('Deleting a downloaded athan (NT-7)', () => {
       defaultSound: 'default',
       defaultReminderMinutes: 15,
       prayers: {
-        fajr: { enabled: true, reminderMinutes: 15, atPrayerTime: true, sound: 'athan:a' },
-        sunrise: { enabled: false, reminderMinutes: 0, atPrayerTime: false, sound: 'default' },
-        dhuhr: { enabled: true, reminderMinutes: 15, atPrayerTime: true, sound: 'athan:a' },
-        asr: { enabled: true, reminderMinutes: 15, atPrayerTime: true, sound: 'default' },
-        maghrib: { enabled: true, reminderMinutes: 15, atPrayerTime: true, sound: 'default' },
-        isha: { enabled: true, reminderMinutes: 15, atPrayerTime: true, sound: 'default' },
+        fajr: { enabled: true, reminderMinutes: 15, atPrayerTime: true, sound: 'athan:a', endReminderMinutes: [] },
+        sunrise: { enabled: false, reminderMinutes: 0, atPrayerTime: false, sound: 'default', endReminderMinutes: [] },
+        dhuhr: { enabled: true, reminderMinutes: 15, atPrayerTime: true, sound: 'athan:a', endReminderMinutes: [] },
+        asr: { enabled: true, reminderMinutes: 15, atPrayerTime: true, sound: 'default', endReminderMinutes: [] },
+        maghrib: { enabled: true, reminderMinutes: 15, atPrayerTime: true, sound: 'default', endReminderMinutes: [] },
+        isha: { enabled: true, reminderMinutes: 15, atPrayerTime: true, sound: 'default', endReminderMinutes: [] },
       },
     },
   } as Partial<Settings>;

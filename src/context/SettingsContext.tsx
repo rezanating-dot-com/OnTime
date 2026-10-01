@@ -15,6 +15,7 @@ const defaultPrayerNotification: PrayerNotificationSettings = {
   reminderMinutes: 15,
   atPrayerTime: true,
   sound: 'default',
+  endReminderMinutes: [],
 };
 
 const defaultJumuahSettings: JumuahSettings = {

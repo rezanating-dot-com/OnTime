@@ -4,7 +4,7 @@ import { useTheme } from '../context/ThemeContext';
 import { useLocation } from '../context/LocationContext';
 import { useTravel } from '../context/TravelContext';
 import { CALCULATION_METHODS } from '../services/prayerService';
-import { MAX_JUMUAH_TIMES } from '../services/notificationService';
+import { MAX_JUMUAH_TIMES, END_REMINDER_OPTIONS } from '../services/notificationService';
 import { CitySearch } from './CitySearch';
 import {
   fetchAthanCatalog,
@@ -47,6 +47,14 @@ const REMINDER_OPTIONS = [
   { value: 15, label: '15 min' },
   { value: 30, label: '30 min' },
 ];
+
+/** Add or remove one lead time, keeping the stored list in a fixed order. */
+function toggleEndReminder(current: number[], minutes: number): number[] {
+  const next = current.includes(minutes)
+    ? current.filter((m) => m !== minutes)
+    : [...current, minutes];
+  return next.sort((a, b) => a - b);
+}
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -1097,6 +1105,9 @@ export function SettingsModal({ isOpen, onClose, onBackRef }: SettingsModalProps
               <p className="text-sm text-[var(--color-muted)]">
                 Configure notifications for each prayer
               </p>
+              <p className="text-xs text-[var(--color-muted)]">
+                "Before it ends" counts Fajr as ending at sunrise and Isha at Islamic midnight.
+              </p>
               {(Object.keys(PRAYER_LABELS) as PrayerName[]).map((prayer) => {
                 const prayerSettings = settings.notifications.prayers[prayer];
                 return (
@@ -1154,6 +1165,40 @@ export function SettingsModal({ isOpen, onClose, onBackRef }: SettingsModalProps
                             ))}
                           </select>
                         </div>
+
+                        {/* Before it ends — sunrise is not a prayer, so it has no window to close */}
+                        {prayer !== 'sunrise' && (
+                          <div className="flex flex-col gap-2">
+                            <span className="text-sm text-[var(--color-muted)]">Before it ends</span>
+                            <div
+                              role="group"
+                              aria-label={`${PRAYER_LABELS[prayer]}: before it ends`}
+                              className="flex flex-wrap gap-2"
+                            >
+                              {END_REMINDER_OPTIONS.map((minutes) => {
+                                const on = prayerSettings.endReminderMinutes.includes(minutes);
+                                return (
+                                  <button
+                                    key={minutes}
+                                    type="button"
+                                    aria-pressed={on}
+                                    onClick={() => updatePrayerNotification(prayer, {
+                                      endReminderMinutes: toggleEndReminder(prayerSettings.endReminderMinutes, minutes),
+                                    })}
+                                    className={`
+                                      px-3 py-1.5 text-sm rounded-full border transition-colors duration-200
+                                      ${on
+                                        ? 'bg-[var(--color-primary)] border-[var(--color-primary)] text-white'
+                                        : 'bg-[var(--color-background)] border-[var(--color-border)] text-[var(--color-text)]'}
+                                    `}
+                                  >
+                                    {minutes} min
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
 
                         {/* Sound */}
                         <div className="flex items-center justify-between gap-2">

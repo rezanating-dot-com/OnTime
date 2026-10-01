@@ -114,12 +114,12 @@ describe('a denied permission cleans up after itself (NT-11)', () => {
           defaultSound: 'default',
           defaultReminderMinutes: 15,
           prayers: {
-            fajr: { enabled: true, reminderMinutes: 15, atPrayerTime: true, sound: 'default' },
-            sunrise: { enabled: false, reminderMinutes: 0, atPrayerTime: false, sound: 'default' },
-            dhuhr: { enabled: true, reminderMinutes: 15, atPrayerTime: true, sound: 'default' },
-            asr: { enabled: true, reminderMinutes: 15, atPrayerTime: true, sound: 'default' },
-            maghrib: { enabled: true, reminderMinutes: 15, atPrayerTime: true, sound: 'default' },
-            isha: { enabled: true, reminderMinutes: 15, atPrayerTime: true, sound: 'default' },
+            fajr: { enabled: true, reminderMinutes: 15, atPrayerTime: true, sound: 'default', endReminderMinutes: [] },
+            sunrise: { enabled: false, reminderMinutes: 0, atPrayerTime: false, sound: 'default', endReminderMinutes: [] },
+            dhuhr: { enabled: true, reminderMinutes: 15, atPrayerTime: true, sound: 'default', endReminderMinutes: [] },
+            asr: { enabled: true, reminderMinutes: 15, atPrayerTime: true, sound: 'default', endReminderMinutes: [] },
+            maghrib: { enabled: true, reminderMinutes: 15, atPrayerTime: true, sound: 'default', endReminderMinutes: [] },
+            isha: { enabled: true, reminderMinutes: 15, atPrayerTime: true, sound: 'default', endReminderMinutes: [] },
           },
         },
         athan: {

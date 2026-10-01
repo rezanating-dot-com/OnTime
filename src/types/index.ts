@@ -78,6 +78,13 @@ export interface PrayerNotificationSettings {
   reminderMinutes: number; // Minutes before prayer (0 = disabled)
   atPrayerTime: boolean;   // Notify exactly at prayer time
   sound: NotificationSound;
+  /**
+   * Minutes before the prayer's window closes to remind again, any mix of the
+   * options the scheduler offers (END_REMINDER_OPTIONS). Empty = none. Fajr
+   * closes at sunrise, Dhuhr at Asr, Asr at Maghrib, Maghrib at Isha and Isha
+   * at Islamic midnight; sunrise is not a prayer and ignores this.
+   */
+  endReminderMinutes: number[];
 }
 
 export interface NotificationSettings {
