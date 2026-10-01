@@ -58,13 +58,15 @@ export async function fetchAthanCatalog(): Promise<AthanCatalogEntry[]> {
 
   items.forEach((li) => {
     const linkEl = li.querySelector('a.link-media');
-    const durationEl = li.querySelector('span');
 
     if (!linkEl) return;
 
     const href = linkEl.getAttribute('href') || '';
     const text = (linkEl.textContent || '').trim();
-    const duration = (durationEl?.textContent || '').trim();
+    // The length is on the link itself. The row's first span is the name
+    // inside the link, which used to be read as the length, so every row
+    // repeated its own name where "03:07" should have been.
+    const duration = (linkEl.getAttribute('data-duration') || li.querySelector('.timer')?.textContent || '').trim();
 
     // Text format: "Muezzin Name - Title"
     const dashIndex = text.indexOf(' - ');

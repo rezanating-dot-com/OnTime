@@ -18,6 +18,7 @@ import {
 } from '../services/athanService';
 import { AthanPlugin } from '../plugins/athanPlugin';
 import { formatDistance } from '../utils/distance';
+import { isFajrAdhan } from '../utils/fajrAdhan';
 import type { CalculationMethod, PrayerName, NotificationSound, CityEntry, AthanCatalogEntry, AthanFile, ReminderSound } from '../types';
 
 type SettingsCategory = 'main' | 'location' | 'calculation' | 'appearance' | 'notifications' | 'notifications-prayers' | 'notifications-athan' | 'notifications-jumuah' | 'notifications-kahf' | 'travel' | 'about' | 'travel-home-search' | 'athan-catalog';
@@ -34,7 +35,8 @@ const PRAYER_LABELS: Record<PrayerName, string> = {
 // "(Built-in)" was dropped from the adhan labels: no audio ships in res/raw, so
 // the word promised a file that was never there. What these options actually do
 // is route the prayer to the athan chosen on the Athan Sounds page — see
-// resolveChannelId — which is still a real, distinct behaviour.
+// resolveChannelId — which is still a real, distinct behaviour. Fajr Adhan has
+// no recording until one is downloaded; the prayer row offers that download.
 const BUILT_IN_SOUND_OPTIONS: { value: NotificationSound; label: string }[] = [
   { value: 'default', label: 'Default' },
   { value: 'adhan', label: 'Adhan' },
@@ -110,6 +112,9 @@ export function SettingsModal({ isOpen, onClose, onBackRef }: SettingsModalProps
   const [catalogError, setCatalogError] = useState<string | null>(null);
   const [previewingId, setPreviewingId] = useState<string | null>(null);
   const [athanSelectError, setAthanSelectError] = useState<string | null>(null);
+  // The catalog opened from a prayer's "Download one", showing Fajr adhans only
+  // and setting the one downloaded as the Fajr athan.
+  const [catalogForFajr, setCatalogForFajr] = useState(false);
   const [reminderSoundError, setReminderSoundError] = useState<string | null>(null);
   const [pickingReminderSound, setPickingReminderSound] = useState(false);
   // App alerts can only use the phone's own sounds on Android.
@@ -173,11 +178,13 @@ export function SettingsModal({ isOpen, onClose, onBackRef }: SettingsModalProps
         updateAthan(slot === 'fajr'
           ? { selectedFajrAthanId: athan.id, currentFajrChannelId: channelId }
           : { selectedAthanId: athan.id, currentChannelId: channelId });
+        return true;
       } catch (err) {
         console.error('Failed to select athan:', err);
         setAthanSelectError(
           err instanceof Error ? err.message : 'Could not switch to that athan.',
         );
+        return false;
       }
     },
     [settings.athan.currentChannelId, settings.athan.currentFajrChannelId, updateAthan],
@@ -209,6 +216,7 @@ export function SettingsModal({ isOpen, onClose, onBackRef }: SettingsModalProps
     setManualCity('');
     setManualError(null);
     setCatalogError(null);
+    setCatalogForFajr(false);
     setAthanSelectError(null);
     setAthanDeleteError(null);
     setPreviewingId(null);
@@ -240,7 +248,8 @@ export function SettingsModal({ isOpen, onClose, onBackRef }: SettingsModalProps
       return;
     }
     if (category === 'athan-catalog') {
-      setCategory('notifications-athan');
+      setCategory(catalogForFajr ? 'notifications-prayers' : 'notifications-athan');
+      setCatalogForFajr(false);
       return;
     }
     if (category.startsWith('notifications-')) {
@@ -248,7 +257,7 @@ export function SettingsModal({ isOpen, onClose, onBackRef }: SettingsModalProps
       return;
     }
     setCategory('main');
-  }, [category, onClose]);
+  }, [category, onClose, catalogForFajr]);
 
   // Expose back handler to parent for hardware back button
   useEffect(() => {
@@ -611,11 +620,20 @@ export function SettingsModal({ isOpen, onClose, onBackRef }: SettingsModalProps
                           {/* See on map */}
                           <button
                             onClick={() => {
-                              const label = encodeURIComponent(loc.cityName);
-                              window.open(
-                                `geo:${loc.coordinates.latitude},${loc.coordinates.longitude}?q=${loc.coordinates.latitude},${loc.coordinates.longitude}(${label})`,
-                                '_system'
-                              );
+                              const { latitude, longitude } = loc.coordinates;
+                              // geo: hands off to the phone's maps app; a desktop
+                              // browser has nothing registered for it, so open
+                              // the place on OpenStreetMap there instead.
+                              if (Capacitor.isNativePlatform()) {
+                                const label = encodeURIComponent(loc.cityName);
+                                window.open(`geo:${latitude},${longitude}?q=${latitude},${longitude}(${label})`, '_system');
+                              } else {
+                                window.open(
+                                  `https://www.openstreetmap.org/?mlat=${latitude}&mlon=${longitude}#map=12/${latitude}/${longitude}`,
+                                  '_blank',
+                                  'noopener',
+                                );
+                              }
                             }}
                             className="p-2 rounded-lg hover:bg-[var(--color-background)] transition-colors"
                             title="See on map"
@@ -1268,6 +1286,23 @@ export function SettingsModal({ isOpen, onClose, onBackRef }: SettingsModalProps
                             ))}
                           </select>
                         </div>
+                        {prayerSettings.sound === 'adhan_fajr' && !settings.athan.currentFajrChannelId && (
+                          <div className="flex items-center justify-between gap-3">
+                            <p className="text-xs text-[var(--color-muted)]">
+                              No Fajr adhan saved yet, so this plays{' '}
+                              {settings.athan.currentChannelId ? 'your main athan' : "the phone's plain tone"}.
+                            </p>
+                            <button
+                              onClick={() => {
+                                setCatalogForFajr(true);
+                                setCategory('athan-catalog');
+                              }}
+                              className="text-sm font-medium text-[var(--color-primary)] flex-shrink-0"
+                            >
+                              Download one
+                            </button>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -1511,8 +1546,18 @@ export function SettingsModal({ isOpen, onClose, onBackRef }: SettingsModalProps
         )}
 
         {/* Athan Catalog Browser */}
+        {category === 'athan-catalog' && athanSelectError && (
+          <div className="p-3 mb-4 rounded-lg bg-red-500/10 border border-red-500/20">
+            <p className="text-red-500 text-sm">{athanSelectError}</p>
+          </div>
+        )}
         {category === 'athan-catalog' && (
           <AthanCatalogPanel
+            fajrOnly={catalogForFajr}
+            fajrAthanId={settings.athan.selectedFajrAthanId}
+            onUseForFajr={async (athanFile) => {
+              if (await handleSelectAthan(athanFile, 'fajr')) setUseSeparateFajr(true);
+            }}
             catalog={catalog}
             setCatalog={setCatalog}
             catalogLoading={catalogLoading}
@@ -2030,6 +2075,9 @@ function AthanCatalogPanel({
   setCatalogError,
   downloadedAthans,
   onDownloaded,
+  fajrOnly = false,
+  fajrAthanId = null,
+  onUseForFajr,
 }: {
   catalog: AthanCatalogEntry[];
   setCatalog: (c: AthanCatalogEntry[]) => void;
@@ -2039,6 +2087,10 @@ function AthanCatalogPanel({
   setCatalogError: (e: string | null) => void;
   downloadedAthans: AthanFile[];
   onDownloaded: (file: AthanFile) => void;
+  /** Show Fajr adhans only, and use each one downloaded for Fajr. */
+  fajrOnly?: boolean;
+  fajrAthanId?: string | null;
+  onUseForFajr?: (file: AthanFile) => void | Promise<void>;
 }) {
   const [downloadingUrls, setDownloadingUrls] = useState<string[]>([]);
   const [downloadError, setDownloadError] = useState<string | null>(null);
@@ -2092,6 +2144,9 @@ function AthanCatalogPanel({
 
   const isDownloaded = (url: string) =>
     downloadedAthans.some((a) => a.sourceUrl === url);
+  const downloadedFile = (url: string) =>
+    downloadedAthans.find((a) => a.sourceUrl === url);
+  const shown = fajrOnly ? catalog.filter(isFajrAdhan) : catalog;
 
   const handleDownload = async (entry: AthanCatalogEntry) => {
     if (downloadingUrls.includes(entry.sourceUrl) || isDownloaded(entry.sourceUrl)) return;
@@ -2101,6 +2156,7 @@ function AthanCatalogPanel({
     try {
       const file = await downloadAthan(entry);
       onDownloaded(file);
+      if (fajrOnly) await onUseForFajr?.(file);
     } catch (err) {
       console.error('Download failed:', err);
       setDownloadError(err instanceof Error ? err.message : 'Download failed');
@@ -2111,7 +2167,12 @@ function AthanCatalogPanel({
 
   return (
     <div className="flex flex-col gap-4">
-      <h3 className="text-lg font-semibold text-[var(--color-text)]">Athan Catalog</h3>
+      <h3 className="text-lg font-semibold text-[var(--color-text)]">{fajrOnly ? 'Fajr Adhans' : 'Athan Catalog'}</h3>
+      {fajrOnly && (
+        <p className="text-sm text-[var(--color-muted)]">
+          These include the line only said at Fajr. Download saves one from Assabile on this phone and uses it for Fajr.
+        </p>
+      )}
 
       {catalogLoading && (
         <div className="p-6 rounded-lg bg-[var(--color-card)] text-center">
@@ -2144,14 +2205,17 @@ function AthanCatalogPanel({
         </div>
       )}
 
-      {!catalogLoading && !catalogError && catalog.length === 0 && (
+      {!catalogLoading && !catalogError && shown.length === 0 && (
         <div className="p-6 rounded-lg bg-[var(--color-card)] text-center">
-          <p className="text-[var(--color-muted)]">No athans found in the catalog.</p>
+          <p className="text-[var(--color-muted)]">
+            {fajrOnly && catalog.length > 0 ? 'No Fajr adhans found in the catalog.' : 'No athans found in the catalog.'}
+          </p>
         </div>
       )}
 
-      {catalog.map((entry, idx) => {
+      {shown.map((entry, idx) => {
         const downloaded = isDownloaded(entry.sourceUrl);
+        const savedFile = downloadedFile(entry.sourceUrl);
         const downloading = downloadingUrls.includes(entry.sourceUrl);
 
         return (
@@ -2183,7 +2247,18 @@ function AthanCatalogPanel({
               </p>
             </div>
 
-            {downloaded ? (
+            {fajrOnly && savedFile && savedFile.id === fajrAthanId ? (
+              <span className="text-xs font-medium text-green-600 bg-green-500/10 px-2.5 py-1 rounded-full flex-shrink-0">
+                Used for Fajr
+              </span>
+            ) : fajrOnly && savedFile ? (
+              <button
+                onClick={() => { void onUseForFajr?.(savedFile); }}
+                className="px-3 py-1.5 rounded-lg text-sm font-medium bg-[var(--color-primary)] text-white hover:opacity-90 transition-opacity flex-shrink-0"
+              >
+                Use for Fajr
+              </button>
+            ) : downloaded ? (
               <span className="text-xs font-medium text-green-600 bg-green-500/10 px-2.5 py-1 rounded-full flex-shrink-0">
                 Downloaded
               </span>

@@ -51,7 +51,10 @@ export function NotificationPermissionDialog({
   }, [settings.notifications.enabled]);
 
   // Check on mount
+  // checkPermissions sets state only after awaiting the plugin, never
+  // synchronously, which the rule cannot see through the async call.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     checkPermissions();
   }, [checkPermissions]);
 

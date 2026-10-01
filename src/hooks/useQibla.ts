@@ -163,16 +163,20 @@ export function useQibla() {
               error: null,
             };
           } else {
-            // Fallback: alpha-based
-            const raw = event.alpha ?? 0;
-            const heading = (360 - raw) % 360;
+            // No true-north reading. Without webkitCompassHeading the only
+            // heading on offer is the orientation event's alpha, which on iOS
+            // is measured from wherever the phone happened to point when the
+            // listener started, not from north. Turning that into a heading
+            // gave a confident wrong answer, and since it could never count as
+            // calibrated the screen asked for a figure-8 that could not help.
+            // Say the compass is unavailable instead.
             pendingRef.current = {
               qiblaDirection,
-              deviceHeading: heading,
-              rotationAngle: qiblaDirection - heading,
-              isCalibrated: true,
-              accuracy: 1,
-              error: null,
+              deviceHeading: 0,
+              rotationAngle: 0,
+              isCalibrated: false,
+              accuracy: 0,
+              error: 'No true-north heading on this device',
             };
           }
           scheduleFlush();

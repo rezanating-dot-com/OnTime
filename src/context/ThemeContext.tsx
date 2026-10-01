@@ -5,6 +5,17 @@ import { Preferences } from '@capacitor/preferences';
 export type Theme = 'light' | 'dark' | 'system' | 'auto' | 'desert' | 'rose' | 'forest' | 'ocean';
 
 const THEME_KEY = 'ontime_theme';
+const THEMES: readonly Theme[] = ['light', 'dark', 'system', 'auto', 'desert', 'rose', 'forest', 'ocean'];
+
+async function readSavedTheme(): Promise<Theme | null> {
+  try {
+    const { value } = await Preferences.get({ key: THEME_KEY });
+    if (value && (THEMES as readonly string[]).includes(value)) return value as Theme;
+  } catch (error) {
+    console.error('Failed to load theme:', error);
+  }
+  return null;
+}
 
 type EffectiveTheme = 'light' | 'dark' | 'desert' | 'rose' | 'forest' | 'ocean';
 
@@ -72,7 +83,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   // Load saved theme on mount
   useEffect(() => {
-    loadTheme();
+    readSavedTheme().then((saved) => {
+      if (saved) setThemeState(saved);
+    });
   }, []);
 
   // Listen for system theme changes
@@ -130,17 +143,6 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       meta.setAttribute('content', colors[effectiveTheme]);
     }
   }, [effectiveTheme]);
-
-  async function loadTheme() {
-    try {
-      const { value } = await Preferences.get({ key: THEME_KEY });
-      if (value && ['light', 'dark', 'system', 'auto', 'desert', 'rose', 'forest', 'ocean'].includes(value)) {
-        setThemeState(value as Theme);
-      }
-    } catch (error) {
-      console.error('Failed to load theme:', error);
-    }
-  }
 
   async function setTheme(newTheme: Theme) {
     setThemeState(newTheme);

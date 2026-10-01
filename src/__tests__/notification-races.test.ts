@@ -24,6 +24,8 @@ import {
   scheduleNotifications,
   scheduleJumuahNotifications,
   getNotificationId,
+  prayerForNotificationId,
+  MAX_DAYS_TO_SCHEDULE,
 } from '../services/notificationService';
 import type { Settings, Coordinates, JumuahSettings } from '../types';
 
@@ -210,11 +212,12 @@ describe('cross-category isolation', () => {
     // Verify cancel was NOT called (since no prayer-range IDs existed)
     // The second mockGetPending call returned only jumuah IDs so cancelByCategory should skip
     expect(mockSchedule).toHaveBeenCalled();
-    // Verify the scheduled notification IDs are all in prayer range (1–999)
+    // Verify the scheduled notification IDs are all prayer ids, clear of the
+    // Jumu'ah, Kahf, reminder and travel ranges (1000–1300)
     const scheduled = mockSchedule.mock.calls[0][0].notifications;
     for (const n of scheduled) {
-      expect(n.id).toBeGreaterThanOrEqual(1);
-      expect(n.id).toBeLessThanOrEqual(999);
+      expect(prayerForNotificationId(n.id)).not.toBeNull();
+      expect(n.id < 1000 || n.id > 1300).toBe(true);
     }
   });
 
@@ -249,25 +252,24 @@ describe('cross-category isolation', () => {
 });
 
 describe('deterministic ID ranges', () => {
-  it('prayer notification IDs are within 1–999', () => {
+  it('prayer notification IDs stay clear of every other category across a month', () => {
     const prayerIds: number[] = [];
     for (const prayer of ['fajr', 'sunrise', 'dhuhr', 'asr', 'maghrib', 'isha'] as const) {
-      for (let dayOffset = 0; dayOffset < 7; dayOffset++) {
+      for (let dayOffset = 0; dayOffset < MAX_DAYS_TO_SCHEDULE; dayOffset++) {
         prayerIds.push(getNotificationId(prayer, dayOffset, false));
         prayerIds.push(getNotificationId(prayer, dayOffset, true));
       }
     }
-
     for (const id of prayerIds) {
-      expect(id).toBeGreaterThanOrEqual(1);
-      expect(id).toBeLessThanOrEqual(999);
+      expect(id).toBeGreaterThanOrEqual(10000);
+      expect(id).toBeLessThanOrEqual(69999);
     }
   });
 
   it('all prayer notification IDs are unique', () => {
     const prayerIds: number[] = [];
     for (const prayer of ['fajr', 'sunrise', 'dhuhr', 'asr', 'maghrib', 'isha'] as const) {
-      for (let dayOffset = 0; dayOffset < 7; dayOffset++) {
+      for (let dayOffset = 0; dayOffset < MAX_DAYS_TO_SCHEDULE; dayOffset++) {
         prayerIds.push(getNotificationId(prayer, dayOffset, false));
         prayerIds.push(getNotificationId(prayer, dayOffset, true));
       }
